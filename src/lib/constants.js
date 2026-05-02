@@ -1,5 +1,32 @@
 export const TEST_USER_IDS = [329];
 
+/** Lowercase trimmed display names excluded from analytics (same intent as stakeholder CSV exports). */
+export const STAKEHOLDER_EXCLUDED_NAMES_LOWER = [
+  "vaishnavi parab",
+  "vaishnavi prb",
+  "test fake",
+  "testing jocker",
+  "testing rpp",
+  "test user",
+  "totem",
+  "totem interactive",
+  "shreyash singh",
+  "aakash puri",
+  "abhishek",
+  "test",
+  "shreyash kolhe",
+  "shoeb khan",
+  "rini test",
+  "rini pillai",
+  "rahul thokal",
+  "pradeep totem",
+  "arjun gujar",
+  "arjun gj",
+  "arjun",
+  "aniket gupta",
+  "aniket jhatu",
+];
+
 // Time calculation constants
 export const TIME_SAVED_CAP_MINUTES = 6;
 export const TYPING_SPEED_WPM = 40; // Words per minute for time saved calculation

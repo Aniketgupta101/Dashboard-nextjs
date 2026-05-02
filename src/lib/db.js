@@ -1,5 +1,8 @@
 import { Pool } from "pg";
-import { TEST_USER_IDS } from "./constants";
+import {
+  STAKEHOLDER_EXCLUDED_NAMES_LOWER,
+  TEST_USER_IDS,
+} from "./constants";
 
 const appVariant =
   (process.env.APP_VARIANT || "consume").toLowerCase() === "enterprise"
@@ -107,6 +110,55 @@ async function executeEnterpriseQuery(query, params) {
   }
 }
 
+/** SQL fragments for excluding test user IDs and stakeholder display names (see STAKEHOLDER_EXCLUDED_NAMES_LOWER). */
+
+function pushExcludedUserIdsClause(params, excludeUsers, alias = "u") {
+  if (!excludeUsers?.length) return null;
+  const placeholders = excludeUsers.map(
+    (_, i) => `$${params.length + i + 1}`,
+  );
+  excludeUsers.forEach((id) => params.push(String(id)));
+  return `${alias}.user_id::text NOT IN (${placeholders.join(", ")})`;
+}
+
+function pushStakeholderNameExcludeClause(params, alias = "u") {
+  const names = STAKEHOLDER_EXCLUDED_NAMES_LOWER;
+  if (!names.length) return null;
+  const placeholders = names.map((_, i) => `$${params.length + i + 1}`);
+  names.forEach((n) => params.push(n));
+  return `LOWER(TRIM(COALESCE(${alias}.name, ''))) NOT IN (${placeholders.join(", ")})`;
+}
+
+function pushUsertableExclusionConditions(params, excludeUsers, alias = "u") {
+  const parts = [];
+  const idPart = pushExcludedUserIdsClause(params, excludeUsers, alias);
+  if (idPart) parts.push(idPart);
+  const namePart = pushStakeholderNameExcludeClause(params, alias);
+  if (namePart) parts.push(namePart);
+  return parts;
+}
+
+function pushStakeholderNotExistsForPromptUser(params, alias = "up") {
+  const names = STAKEHOLDER_EXCLUDED_NAMES_LOWER;
+  if (!names.length) return null;
+  const placeholders = names.map((_, i) => `$${params.length + i + 1}`);
+  names.forEach((n) => params.push(n));
+  return `NOT EXISTS (
+    SELECT 1 FROM usertable ux
+    WHERE ux.user_id::text = ${alias}.user_id::text
+    AND LOWER(TRIM(COALESCE(ux.name, ''))) IN (${placeholders.join(", ")})
+  )`;
+}
+
+function pushPromptTableExclusionConditions(params, excludeUsers, alias = "up") {
+  const parts = [];
+  const idPart = pushExcludedUserIdsClause(params, excludeUsers, alias);
+  if (idPart) parts.push(idPart);
+  const stakePart = pushStakeholderNotExistsForPromptUser(params, alias);
+  if (stakePart) parts.push(stakePart);
+  return parts;
+}
+
 // Test database connection
 export async function testConnection() {
   try {
@@ -203,14 +255,9 @@ export async function getAnalyticsData(
     );
   }
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
 
   if (conditions.length > 0) {
     query += ` WHERE ${conditions.join(" AND ")}`;
@@ -242,14 +289,9 @@ export async function getTotalPaidUsersByDate(
   // Paid status check - exact match for 'pro' status
   conditions.push(`COALESCE(us.status, 'free') = 'pro'`);
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
 
   // Get all paid users with their creation date
   const query = `
@@ -299,14 +341,9 @@ export async function getPriorPaidUsers(
     );
   }
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
 
   const query = `
     SELECT DISTINCT u.user_id
@@ -329,16 +366,9 @@ export async function getUserAttritionData(
   const params = [];
   const sourceConditions = [];
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    sourceConditions.push(
-      `up.user_id::text NOT IN (${placeholders.join(", ")})`,
-    );
-  }
+  pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
+    sourceConditions.push(c),
+  );
 
   // Source filtering conditions (applied to prompts before aggregation)
   if (source === "Chat") {
@@ -434,14 +464,9 @@ export async function getConversionMetrics(
     conditions.push(`u.created_at <= $${params.length}`);
   }
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
 
   // Source filtering logic
   let joinWithPrompts = "";
@@ -669,13 +694,9 @@ export async function getInstallationMetrics(
     whereConditions.push(`u.created_at <= $${params.length}`);
   }
 
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    whereConditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    whereConditions.push(c),
+  );
 
   const whereClause =
     whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
@@ -716,13 +737,9 @@ export async function getDailyInstallationMetrics(
     whereConditions.push(`u.created_at <= $${params.length}`);
   }
 
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    whereConditions.push(`u.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    whereConditions.push(c),
+  );
 
   const whereClause =
     whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
@@ -804,11 +821,9 @@ export async function getUsageBehaviorData(
   const params = [];
   const conditions = [];
 
-  // Exclude test users by ID
-  if (excludeUsers.length > 0) {
-    const ids = excludeUsers.join(", ");
-    conditions.push(`up.user_id NOT IN (${ids})`);
-  }
+  pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
+    conditions.push(c),
+  );
 
   // Date filtering
   if (startDate) {
@@ -904,14 +919,9 @@ export async function getActiveUsersBreakdown(
   const params = [];
   const conditions = [];
 
-  // Exclude test users
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`up.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
+    conditions.push(c),
+  );
 
   // Date filtering
   if (startDate) {
@@ -986,13 +996,9 @@ export async function getActiveUserIds(
   const params = [];
   const conditions = [];
 
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    conditions.push(`up.user_id::text NOT IN (${placeholders.join(", ")})`);
-  }
+  pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
+    conditions.push(c),
+  );
 
   if (startDate) {
     params.push(startDate.toISOString());
@@ -1042,16 +1048,9 @@ export async function getDailyChurnActivity(
   const params = [];
   const sourceJoinConditions = [];
 
-  // Exclude test users
-  if (excludeUsers.length > 0) {
-    const placeholders = excludeUsers.map(
-      (_, i) => `$${params.length + i + 1}`,
-    );
-    excludeUsers.forEach((id) => params.push(String(id)));
-    sourceJoinConditions.push(
-      `up.user_id::text NOT IN (${placeholders.join(", ")})`,
-    );
-  }
+  pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
+    sourceJoinConditions.push(c),
+  );
 
   // Source filtering logic
   // We ALWAYS need to join save_enhance_prompt to check last_status (Success/Failure)
