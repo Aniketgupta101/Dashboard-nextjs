@@ -8,6 +8,49 @@ const emptyData = {
   activeUsers: 0,
   eventsOverTime: [],
   topEvents: [],
+  avgDailyEvents: 0,
+  orgHealth: {
+    promptsPerDay: [],
+    dauTrend: [],
+    avgDau: 0,
+    engagementIndex: 0,
+    trackedEventInventory: 0,
+  },
+  acquisition: {
+    authEvents: [],
+    loginFailureByType: [],
+    loginMethod: [],
+  },
+  promptIntelligence: {
+    promptSubmissions: 0,
+    refinements: 0,
+    refinementRate: 0,
+    modelDistribution: [],
+    speedModeDistribution: [],
+    attachmentEvents: 0,
+    attachmentRate: 0,
+    starterEvents: [],
+  },
+  governance: {
+    governanceEvents: [],
+    policyToggles: [],
+    flaggedOrViolationEvents: 0,
+    flaggedRate: 0,
+    auditLogViews: 0,
+  },
+  engagement: {
+    personalizationSaves: 0,
+    personalizationViews: 0,
+    personalizationCompletionRate: 0,
+    notificationReads: 0,
+    notificationViews: 0,
+    notificationReadRate: 0,
+  },
+  adminOps: {
+    exportsByType: [],
+    roleAtLogin: [],
+  },
+  meta: {},
   enterpriseOptions: [],
 };
 
@@ -56,14 +99,26 @@ export function useEnterprisePosthogData(
         throw new Error(json.error || `Failed with status ${response.status}`);
       }
 
+      const payload = json.data || {};
       setData({
-        ...(json.data || emptyData),
+        ...emptyData,
+        ...payload,
+        orgHealth: { ...emptyData.orgHealth, ...payload.orgHealth },
+        acquisition: { ...emptyData.acquisition, ...payload.acquisition },
+        promptIntelligence: {
+          ...emptyData.promptIntelligence,
+          ...payload.promptIntelligence,
+        },
+        governance: { ...emptyData.governance, ...payload.governance },
+        engagement: { ...emptyData.engagement, ...payload.engagement },
+        adminOps: { ...emptyData.adminOps, ...payload.adminOps },
+        meta: payload.meta || {},
         enterpriseOptions: enterpriseJson?.data?.enterpriseOptions || [],
       });
     } catch (err) {
       console.error("Enterprise PostHog fetch failed:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
-      setData(emptyData);
+      setData({ ...emptyData, enterpriseOptions: [] });
     } finally {
       setIsLoading(false);
     }
