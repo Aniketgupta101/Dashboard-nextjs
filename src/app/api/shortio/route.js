@@ -297,6 +297,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      _meta: { source: "shortio/link_statistics" },
       data: {
         totalClicks,
         humanClicks,

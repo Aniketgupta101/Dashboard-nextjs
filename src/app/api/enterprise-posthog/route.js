@@ -437,7 +437,7 @@ export async function GET(request) {
       },
     };
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, _meta: { source: "posthog/enterprise_project" }, data });
   } catch (error) {
     console.error("Enterprise PostHog API error:", error);
     const msg = error instanceof Error ? error.message : "Unknown PostHog error";

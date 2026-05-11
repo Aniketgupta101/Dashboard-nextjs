@@ -359,12 +359,13 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      _meta: { source: "posthog/consumer_project" },
       data: {
         totalEvents,
         uniqueEventTypes,
         eventsOverTime,
         eventBreakdown,
-        events: events, // Limit is already applied in HogQL
+        events: events,
         hasMore: totalEvents > Number(limit),
         fetchedEvents: events.length,
         projectId: POSTHOG_PROJECT_ID,

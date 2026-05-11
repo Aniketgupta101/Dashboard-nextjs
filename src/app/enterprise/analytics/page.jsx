@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import {
@@ -46,11 +46,11 @@ const DASH_TABS = [
   { id: "engagement", label: "Engagement & admin", icon: Users },
 ];
 
-/** Shown only for the active tab — maps to Velocity Enterprise spec sections. */
+/** Shown only for the active tab â€” maps to Velocity Enterprise spec sections. */
 const TAB_CONTEXT = {
   overview: {
     title: "Org health",
-    spec: "Spec §2.3 / §4 — Org Health dashboard",
+    spec: "Spec Â§2.3 / Â§4 â€” Org Health dashboard",
     bullets: [
       "Primary signals: prompts per day, DAU trend, and a stickiness-style engagement index.",
       "Charts use HogQL on your enterprise PostHog project (date range + optional enterprise filter).",
@@ -59,7 +59,7 @@ const TAB_CONTEXT = {
   },
   acquisition: {
     title: "Acquisition & auth",
-    spec: "Spec §2.1 — Acquisition & auth metrics",
+    spec: "Spec Â§2.1 â€” Acquisition & auth metrics",
     bullets: [
       "Auth funnel: counts per named event (page_viewed_landing, login_success, etc.).",
       "Login failures: breakdown of login_failed by error_type (e.g. wrong_password, no_team).",
@@ -69,25 +69,25 @@ const TAB_CONTEXT = {
   },
   prompts: {
     title: "Prompt intelligence",
-    spec: "Spec §2.4 — Prompt quality & AI usage",
+    spec: "Spec Â§2.4 â€” Prompt quality & AI usage",
     bullets: [
       "Model and speed charts read properties on prompt_submitted: model_used, speed_mode.",
-      "Refinement rate uses prompt_refinement_submitted ÷ prompt_submitted.",
+      "Refinement rate uses prompt_refinement_submitted Ã· prompt_submitted.",
       "Starter funnel counts starter_prompt_viewed, shuffle, selected; attachment rate uses file_attached vs prompts.",
     ],
   },
   governance: {
     title: "Governance & risk",
-    spec: "Spec §2.5 — Governance & compliance",
+    spec: "Spec Â§2.5 â€” Governance & compliance",
     bullets: [
       "Governance events include policy flags, VYGR-specific flags, and related system events.",
-      "Flag rate is a proxy: flagged-style event count ÷ prompt_submitted in the same period.",
+      "Flag rate is a proxy: flagged-style event count Ã· prompt_submitted in the same period.",
       "Policy toggles count data_protection_rule_toggled and tool_access_toggled; audit uses audit_log_viewed.",
     ],
   },
   engagement: {
     title: "Engagement & admin",
-    spec: "Spec §2.3 / §2.6 — Engagement & admin surfaces",
+    spec: "Spec Â§2.3 / Â§2.6 â€” Engagement & admin surfaces",
     bullets: [
       "Personalization: saves vs views from personalization_profile_saved and personalization_viewed.",
       "Notifications: read rate from notification_read vs notifications_viewed.",
@@ -196,7 +196,7 @@ const KPI_COPY = {
       <code className="rounded bg-muted px-0.5">distinct_id</code>) who fired any
       event in the selected range, after filters.
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span>{" "}
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span>{" "}
       <code className="text-[10px]">count(DISTINCT distinct_id)</code> over
       events, scoped by date and enterprise/org properties.
     </>
@@ -206,7 +206,7 @@ const KPI_COPY = {
       <span className="font-medium text-foreground">What it is:</span> total
       ingested events in range matching filters.
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span>{" "}
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span>{" "}
       <code className="text-[10px]">count()</code> on the events table. Internal
       noise events like{" "}
       <code className="rounded bg-muted px-0.5">$snapshot</code> are excluded in
@@ -218,7 +218,7 @@ const KPI_COPY = {
       <span className="font-medium text-foreground">What it is:</span> number of
       times users submitted a prompt.
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span>{" "}
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span>{" "}
       count of events where{" "}
       <code className="rounded bg-muted px-0.5">event = prompt_submitted</code>.
     </>
@@ -228,8 +228,8 @@ const KPI_COPY = {
       <span className="font-medium text-foreground">What it is:</span> share of
       prompts that were refined after the first run.
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span>{" "}
-      100 ×{" "}
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span>{" "}
+      100 Ã—{" "}
       <code className="text-[10px]">
         count(prompt_refinement_submitted) / count(prompt_submitted)
       </code>
@@ -239,10 +239,10 @@ const KPI_COPY = {
   flagRate: (
     <>
       <span className="font-medium text-foreground">What it is:</span> governance
-      flag volume relative to prompt traffic (proxy for “flagged rate”).
+      flag volume relative to prompt traffic (proxy for â€œflagged rateâ€).
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span>{" "}
-      100 × (count of selected governance / flag-style events) ÷{" "}
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span>{" "}
+      100 Ã— (count of selected governance / flag-style events) Ã·{" "}
       <code className="rounded bg-muted px-0.5">prompt_submitted</code>. See API
       for the exact event list.
     </>
@@ -252,9 +252,9 @@ const KPI_COPY = {
       <span className="font-medium text-foreground">What it is:</span> average
       daily active users across days that have data in the range.
       <br />
-      <span className="font-medium text-foreground">How it’s calculated:</span> for
+      <span className="font-medium text-foreground">How itâ€™s calculated:</span> for
       each day: distinct users that day; then the arithmetic mean of those daily
-      counts (not the same as period uniques ÷ days).
+      counts (not the same as period uniques Ã· days).
     </>
   ),
 };
@@ -378,14 +378,14 @@ export default function EnterpriseAnalyticsPage() {
           <StatCard
             title="Refinement rate"
             value={`${data.promptIntelligence?.refinementRate ?? 0}%`}
-            subtitle="refinements ÷ prompts"
+            subtitle="refinements Ã· prompts"
             icon={Sparkles}
             tooltip={KPI_COPY.refinement}
           />
           <StatCard
             title="Governance flag rate"
             value={`${data.governance?.flaggedRate ?? 0}%`}
-            subtitle="flags ÷ prompts (proxy)"
+            subtitle="flags Ã· prompts (proxy)"
             icon={Shield}
             tooltip={KPI_COPY.flagRate}
           />
@@ -408,7 +408,7 @@ export default function EnterpriseAnalyticsPage() {
         <>
           {tab === "overview" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard
+              <ChartCard source=posthog
                 title="Prompts per day vs DAU"
                 tooltip={
                   <>
@@ -455,7 +455,7 @@ export default function EnterpriseAnalyticsPage() {
                 </ChartContainer>
               </ChartCard>
 
-              <ChartCard
+              <ChartCard source=posthog
                 title="Event volume (all sources)"
                 tooltip={
                   <>
@@ -498,12 +498,12 @@ export default function EnterpriseAnalyticsPage() {
                 </ChartContainer>
               </ChartCard>
 
-              <ChartCard
+              <ChartCard source=posthog
                 title="Engagement index"
                 tooltip={
                   <>
                     <span className="font-medium text-foreground">Formula:</span>{" "}
-                    average daily DAU ÷ period unique users (
+                    average daily DAU Ã· period unique users (
                     <code className="text-[10px]">avg_dau / active_users</code>
                     ). Higher suggests users show up on more days relative to the
                     cohort size (stickiness-style; not calendar DAU/MAU).
@@ -518,15 +518,15 @@ export default function EnterpriseAnalyticsPage() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Reference library size:{" "}
-                  {data.orgHealth?.trackedEventInventory ?? "—"} named events.
+                  {data.orgHealth?.trackedEventInventory ?? "â€”"} named events.
                 </p>
               </ChartCard>
 
-              <ChartCard
+              <ChartCard source=posthog
                 title="Top events"
                 tooltip={
                   <>
-                    Ranked raw event names by volume — quick check that
+                    Ranked raw event names by volume â€” quick check that
                     instrumentation keys match expectations (e.g.{" "}
                     <code className="rounded bg-muted px-0.5">login_success</code>
                     ).
@@ -564,7 +564,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "acquisition" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard
+              <ChartCard source=posthog
                 title="Auth funnel (named events)"
                 tooltip={
                   <>
@@ -582,10 +582,10 @@ export default function EnterpriseAnalyticsPage() {
                     event: r.event,
                     count: r.count,
                   }))}
-                  empty="No auth events in range — instrument page_viewed_landing, login_success, etc."
+                  empty="No auth events in range â€” instrument page_viewed_landing, login_success, etc."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Login failures by error_type"
                 tooltip={
                   <>
@@ -602,10 +602,10 @@ export default function EnterpriseAnalyticsPage() {
                     { key: "count", label: "Count" },
                   ]}
                   rows={data.acquisition?.loginFailureByType || []}
-                  empty="No login_failed events — track error_type (e.g. no_team)."
+                  empty="No login_failed events â€” track error_type (e.g. no_team)."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Login method (SSO vs manual)"
                 tooltip={
                   <>
@@ -630,7 +630,7 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="CTR & funnel next steps"
                 tooltip={
                   <>
@@ -642,9 +642,9 @@ export default function EnterpriseAnalyticsPage() {
               >
                 <p className="text-sm text-muted-foreground">
                   Use PostHog Funnels for{" "}
-                  <code className="text-xs">page_viewed_landing</code> →{" "}
-                  <code className="text-xs">cta_clicked_login</code> →{" "}
-                  <code className="text-xs">login_success</code> →{" "}
+                  <code className="text-xs">page_viewed_landing</code> â†’{" "}
+                  <code className="text-xs">cta_clicked_login</code> â†’{" "}
+                  <code className="text-xs">login_success</code> â†’{" "}
                   <code className="text-xs">prompt_submitted</code>. Raw auth
                   counts above confirm instrumentation volume.
                 </p>
@@ -654,7 +654,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "prompts" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard
+              <ChartCard source=posthog
                 title="Model usage"
                 tooltip={
                   <>
@@ -662,9 +662,9 @@ export default function EnterpriseAnalyticsPage() {
                     <code className="rounded bg-muted px-0.5">
                       prompt_submitted
                     </code>{" "}
-                    → property{" "}
+                    â†’ property{" "}
                     <code className="rounded bg-muted px-0.5">model_used</code>{" "}
-                    (empty → &quot;unknown&quot;).
+                    (empty â†’ &quot;unknown&quot;).
                   </>
                 }
               >
@@ -681,7 +681,7 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Speed mode"
                 tooltip={
                   <>
@@ -708,11 +708,11 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Starter prompt funnel"
                 tooltip={
                   <>
-                    Event counts: viewed → shuffle → selected. Use ratios between
+                    Event counts: viewed â†’ shuffle â†’ selected. Use ratios between
                     steps as funnel conversion proxies.
                   </>
                 }
@@ -726,12 +726,12 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No starter_prompt_* events yet."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Attachment usage"
                 tooltip={
                   <>
                     <span className="font-medium text-foreground">Rate:</span> 100
-                    ×{" "}
+                    Ã—{" "}
                     <code className="text-[10px]">
                       count(file_attached) / count(prompt_submitted)
                     </code>
@@ -758,7 +758,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "governance" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard
+              <ChartCard source=posthog
                 title="Governance & compliance events"
                 tooltip={
                   <>
@@ -777,10 +777,10 @@ export default function EnterpriseAnalyticsPage() {
                     { key: "count", label: "Count" },
                   ]}
                   rows={data.governance?.governanceEvents || []}
-                  empty="No governance events — instrument prompt_flagged_by_system, review flows, VYGR-specific flags."
+                  empty="No governance events â€” instrument prompt_flagged_by_system, review flows, VYGR-specific flags."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Policy center toggles"
                 tooltip={
                   <>
@@ -805,11 +805,11 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No policy toggles recorded."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Audit & risk summary"
                 tooltip={
                   <>
-                    Flag rate uses governance subset ÷ prompts. Audit figure is
+                    Flag rate uses governance subset Ã· prompts. Audit figure is
                     count of{" "}
                     <code className="rounded bg-muted px-0.5">
                       audit_log_viewed
@@ -839,7 +839,7 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Review queue & resolution"
                 tooltip={
                   <>
@@ -860,14 +860,14 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "engagement" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard
+              <ChartCard source=posthog
                 title="Personalization"
                 tooltip={
                   <>
                     <span className="font-medium text-foreground">
                       Completion rate:
                     </span>{" "}
-                    100 × saves ÷ views (
+                    100 Ã— saves Ã· views (
                     <code className="text-[10px]">
                       personalization_profile_saved / personalization_viewed
                     </code>
@@ -892,12 +892,12 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Notifications"
                 tooltip={
                   <>
                     <span className="font-medium text-foreground">Read rate:</span>{" "}
-                    100 × reads ÷ notification page views (engagement proxy, not
+                    100 Ã— reads Ã· notification page views (engagement proxy, not
                     delivery rate).
                   </>
                 }
@@ -917,13 +917,13 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="CSV exports (History / Audit)"
                 tooltip={
                   <>
                     From{" "}
                     <code className="rounded bg-muted px-0.5">csv_exported</code>{" "}
-                    — grouped by{" "}
+                    â€” grouped by{" "}
                     <code className="rounded bg-muted px-0.5">export_type</code>{" "}
                     property.
                   </>
@@ -938,7 +938,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No csv_exported events."
                 />
               </ChartCard>
-              <ChartCard
+              <ChartCard source=posthog
                 title="Role at login"
                 tooltip={
                   <>
@@ -956,7 +956,7 @@ export default function EnterpriseAnalyticsPage() {
                     { key: "count", label: "Count" },
                   ]}
                   rows={data.adminOps?.roleAtLogin || []}
-                  empty="No roles on login_success — set role or user_role in properties."
+                  empty="No roles on login_success â€” set role or user_role in properties."
                 />
               </ChartCard>
             </div>
@@ -972,3 +972,4 @@ export default function EnterpriseAnalyticsPage() {
     </div>
   );
 }
+

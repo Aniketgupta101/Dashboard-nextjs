@@ -7,6 +7,23 @@ import {
 } from "./constants.js";
 import { getDisplayDate } from "./date-utils.js";
 
+/**
+ * Canonical time-saved calculation. Single source of truth for all routes.
+ * Returns minutes saved for one prompt pair.
+ */
+export function calcTimeSavedMinutes(userPrompt, enhancedPrompt) {
+  if (!userPrompt || !enhancedPrompt) return 0;
+  const userWords = userPrompt.split(/\s+/).length;
+  const enhancedWords = enhancedPrompt.split(/\s+/).length;
+  const extraWords = Math.max(0, enhancedWords - userWords);
+  const complexity = calculatePromptComplexity(userPrompt);
+  let multiplier = 1.0;
+  if (complexity.level === "medium") multiplier = 1.2;
+  if (complexity.level === "high") multiplier = 1.4;
+  const savedMinutes = (extraWords / 40) * multiplier;
+  return Math.min(savedMinutes, TIME_SAVED_CAP_MINUTES);
+}
+
 export function processData(
   data,
   initialPaidUserIds = [],
@@ -73,26 +90,7 @@ export function processData(
 
     let totalTimeSaved = 0;
     unique.forEach((d) => {
-      if (d.enhanced_prompt && d.user_prompt) {
-        const userWords = d.user_prompt.split(/\s+/).length;
-        const enhancedWords = d.enhanced_prompt.split(/\s+/).length;
-        const extraWords = Math.max(0, enhancedWords - userWords);
-
-        // Apply Complexity Multiplier
-        // Low -> 1.0, Medium -> 1.2, High -> 1.4
-        const complexity = calculatePromptComplexity(d.user_prompt);
-        let multiplier = 1.0;
-        if (complexity.level === "medium") multiplier = 1.2;
-        if (complexity.level === "high") multiplier = 1.4;
-
-        // Base time in minutes (40 wpm)
-        let savedMinutes = (extraWords / 40) * multiplier;
-
-        // Hard Cap: 10 minutes max per prompt to prevent outliers
-        savedMinutes = Math.min(savedMinutes, TIME_SAVED_CAP_MINUTES);
-
-        totalTimeSaved += savedMinutes;
-      }
+      totalTimeSaved += calcTimeSavedMinutes(d.user_prompt, d.enhanced_prompt);
     });
 
     return {
@@ -209,44 +207,9 @@ export function processData(
       ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
       : 0;
 
-  // Calculate time saved (words added * avg typing time)
-  // Calculate time saved (words added * avg typing time)
-  // Calculate time saved (words added * avg typing time)
-  // Logic: Complexity Multiplier + Hard Cap
   let totalTimeSaved = 0;
-  const debugLog = []; // Accumulate logs for a cleaner table output
-
   unique.forEach((d) => {
-    if (d.enhanced_prompt && d.user_prompt) {
-      const userWords = d.user_prompt.split(/\s+/).length;
-      const enhancedWords = d.enhanced_prompt.split(/\s+/).length;
-      const extraWords = Math.max(0, enhancedWords - userWords);
-
-      // Complexity Multiplier
-      const complexity = calculatePromptComplexity(d.user_prompt);
-      let multiplier = 1.0;
-      if (complexity.level === "medium") multiplier = 1.2;
-      if (complexity.level === "high") multiplier = 1.4;
-
-      // Base Calculation
-      let savedMinutes = (extraWords / 40) * multiplier;
-
-      // Hard Cap
-      savedMinutes = Math.min(savedMinutes, TIME_SAVED_CAP_MINUTES);
-
-      debugLog.push({
-        prompt:
-          d.user_prompt?.slice(0, 20) +
-          (d.user_prompt?.length > 20 ? "..." : ""),
-        level: complexity.level,
-        multiplier,
-        extraWords,
-        rawMin: ((extraWords / 40) * multiplier).toFixed(2),
-        cappedMin: savedMinutes.toFixed(2),
-      });
-
-      totalTimeSaved += savedMinutes;
-    }
+    totalTimeSaved += calcTimeSavedMinutes(d.user_prompt, d.enhanced_prompt);
   });
 
   const totalTimeSavedHours = totalTimeSaved / 60;
@@ -434,21 +397,7 @@ export function processData(
           dayProcessingTimes.push(Number(d.processing_time));
         }
 
-        // Calculate Time Saved for this day
-        if (d.enhanced_prompt && d.user_prompt) {
-          const userWords = d.user_prompt.split(/\s+/).length;
-          const enhancedWords = d.enhanced_prompt.split(/\s+/).length;
-          const extraWords = Math.max(0, enhancedWords - userWords);
-
-          const complexity = calculatePromptComplexity(d.user_prompt);
-          let multiplier = 1.0;
-          if (complexity.level === "medium") multiplier = 1.2;
-          if (complexity.level === "high") multiplier = 1.4;
-
-          let savedMinutes = (extraWords / 40) * multiplier;
-          savedMinutes = Math.min(savedMinutes, TIME_SAVED_CAP_MINUTES); // Cap
-          dayTimeSavedMinutes += savedMinutes;
-        }
+        dayTimeSavedMinutes += calcTimeSavedMinutes(d.user_prompt, d.enhanced_prompt);
       }
     });
 

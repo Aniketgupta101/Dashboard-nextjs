@@ -1,5 +1,6 @@
 import { calculatePromptComplexity } from "./utils.js";
-import { TIME_SAVED_CAP_MINUTES, POWER_USER_THRESHOLD } from "./constants.js";
+import { calcTimeSavedMinutes } from "./analytics-utils.js";
+import { POWER_USER_THRESHOLD } from "./constants.js";
 
 /**
  * Logic for classifying users into behavioral segments: Power, Casual, Dead.
@@ -93,17 +94,7 @@ export function processUsageData(rawData, startDate, endDate) {
       else promptSophistication.long.push(promptRecord);
 
       if (row.enhanced_prompt) {
-        const userWords = row.user_prompt.split(/\s+/).length;
-        const enhancedWords = row.enhanced_prompt.split(/\s+/).length;
-        const extraWords = Math.max(0, enhancedWords - userWords);
-
-        let multiplier = 1.0;
-        if (result.level === "medium") multiplier = 1.2;
-        if (result.level === "high") multiplier = 1.4;
-
-        let savedMinutes = (extraWords / 40) * multiplier;
-        savedMinutes = Math.min(savedMinutes, TIME_SAVED_CAP_MINUTES);
-        totalTimeSaved += savedMinutes;
+        totalTimeSaved += calcTimeSavedMinutes(row.user_prompt, row.enhanced_prompt);
       }
     }
   });

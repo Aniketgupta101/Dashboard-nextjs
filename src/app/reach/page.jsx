@@ -442,6 +442,7 @@ export default function ReachPage() {
             <ChartCard
               title="Clicks Over Time"
               tooltip="Daily click volume across all short links"
+              source="shortio"
             >
               <ChartContainer config={{}} className="h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -490,6 +491,7 @@ export default function ReachPage() {
                   <ChartCard
                     title="Clicks by Country"
                     tooltip="Short link clicks by country"
+                    source="shortio"
                   >
                     <ChartContainer
                       config={{
@@ -612,6 +614,7 @@ export default function ReachPage() {
                     <ChartCard
                       title="Clicks by Referrer"
                       tooltip="Where clicks came from (traffic source)"
+                      source="shortio"
                     >
                       <ChartContainer
                         config={{
@@ -2238,6 +2241,7 @@ export default function ReachPage() {
             <ChartCard
               title="Events Over Time"
               tooltip="Daily event volume across all event types"
+              source="posthog"
             >
               <ChartContainer
                 config={{
@@ -2305,6 +2309,7 @@ export default function ReachPage() {
               <ChartCard
                 title="Event Breakdown"
                 tooltip="Distribution of events by type"
+                source="posthog"
               >
                 <ChartContainer config={{}} className="h-[280px] w-full">
                   <ResponsiveContainer width="100%" height="100%">

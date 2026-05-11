@@ -18,6 +18,9 @@ import {
   Eye,
   Star,
   Building2,
+  BookOpen,
+  Crown,
+  Tv2,
 } from "lucide-react";
 
 import {
@@ -128,6 +131,25 @@ const dataItems = [
   },
 ];
 
+// Arjun items
+const arjunItems = [
+  {
+    title: "Changes & Updates",
+    url: "/arjun",
+    icon: BookOpen,
+  },
+  {
+    title: "Paid Users",
+    url: "/arjun/paid-users",
+    icon: Crown,
+  },
+  {
+    title: "VYGR Media",
+    url: "/arjun/vygr-media",
+    icon: Tv2,
+  },
+];
+
 export function AppSidebar({ ...props }) {
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -216,6 +238,24 @@ export function AppSidebar({ ...props }) {
           <SidebarGroupContent>
             <SidebarMenu>
               {dataItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <a href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Arjun</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {arjunItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <a href={item.url}>

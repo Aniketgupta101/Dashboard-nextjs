@@ -36,6 +36,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      _meta: { source: "enterprise_db/Enterprise+User+Team+UserPrompt+EnhancedPrompt" },
       data: {
         summary: {
           activeEnterprises,
@@ -84,6 +85,15 @@ export async function GET(request) {
         enterpriseOptions: (raw.enterpriseOptions || []).map((r) => ({
           enterpriseId: r.enterpriseId,
           enterpriseName: r.enterpriseName,
+        })),
+        userActivity: (raw.userActivity || []).map((r) => ({
+          userId: r.userId,
+          name: r.name,
+          email: r.email,
+          isActive: r.isActive,
+          joinedAt: r.joinedAt,
+          promptCount: toNumber(r.promptCount),
+          lastActive: r.lastActive,
         })),
       },
     });

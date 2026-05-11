@@ -20,6 +20,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      _meta: { source: "consume_db/api_error_logs" },
       data: data,
     });
   } catch (error) {

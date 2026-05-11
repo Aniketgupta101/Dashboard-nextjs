@@ -580,12 +580,25 @@ export function MetricCard({
   );
 }
 
+const SOURCE_BADGE_STYLES = {
+  posthog: "bg-purple-500/10 text-purple-500 border-purple-400/30",
+  db: "bg-blue-500/10 text-blue-400 border-blue-400/30",
+  shortio: "bg-orange-500/10 text-orange-400 border-orange-400/30",
+};
+
+const SOURCE_LABELS = {
+  posthog: "PostHog",
+  db: "DB",
+  shortio: "Short.io",
+};
+
 export function ChartCard({
   title,
   children,
   tooltip,
   headerAction,
   className,
+  source,
 }) {
   return (
     <div
@@ -613,6 +626,16 @@ export function ChartCard({
                 {tooltip}
               </TooltipContent>
             </Tooltip>
+          )}
+          {source && SOURCE_LABELS[source] && (
+            <span
+              className={cn(
+                "text-[9px] font-semibold px-1.5 py-0.5 rounded border tracking-wide",
+                SOURCE_BADGE_STYLES[source],
+              )}
+            >
+              {SOURCE_LABELS[source]}
+            </span>
           )}
         </div>
         {headerAction && (

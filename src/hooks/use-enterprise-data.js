@@ -25,6 +25,9 @@ const emptyData = {
   moderationActions: [],
   queueStatus: [],
   enterpriseOptions: [],
+  userActivity: [],
+  hourlyActivity: [],
+  dowActivity: [],
 };
 
 export function useEnterpriseData(

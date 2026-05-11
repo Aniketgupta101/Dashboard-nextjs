@@ -159,6 +159,42 @@ function pushPromptTableExclusionConditions(params, excludeUsers, alias = "up") 
   return parts;
 }
 
+/**
+ * Standard 5-table FROM + JOIN block shared by analytics, usage, and attrition queries.
+ * Alias conventions: up=user_prompts, sep=save_enhance_prompt, rp=refine_prompt,
+ *                    u=usertable, us=userstatus
+ */
+export const BASE_PROMPT_FROM_JOINS = `
+  FROM user_prompts up
+  LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
+  LEFT JOIN refine_prompt rp        ON sep.enhanced_prompt_id = rp.enhanced_prompt_id
+  LEFT JOIN usertable u              ON up.user_id = u.user_id
+  LEFT JOIN userstatus us            ON up.user_id = us.user_id
+`;
+
+/**
+ * Appends date + source filter conditions to an existing params/conditions array.
+ * Returns the (potentially modified) sourceJoin string for functions that build
+ * the JOIN inline based on source mode.
+ */
+export function addDateSourceFilters(params, conditions, { startDate, endDate, source } = {}) {
+  if (startDate) {
+    params.push(startDate.toISOString());
+    conditions.push(`up.created_at >= $${params.length}`);
+  }
+  if (endDate) {
+    params.push(endDate.toISOString());
+    conditions.push(`up.created_at <= $${params.length}`);
+  }
+  if (source === "Chat") {
+    params.push("velocity");
+    conditions.push(`sep.llm_used ILIKE $${params.length}`);
+  } else if (source === "Extension") {
+    params.push("velocity");
+    conditions.push(`(sep.llm_used NOT ILIKE $${params.length} OR sep.llm_used IS NULL)`);
+  }
+}
+
 // Test database connection
 export async function testConnection() {
   try {
@@ -195,12 +231,8 @@ export async function getAnalyticsData(
   source = "All",
   excludeUsers = TEST_USER_IDS,
 ) {
-  // Using correct table names from database schema:
-  // - user_prompts: Original user prompts
-  // - save_enhance_prompt: AI-enhanced prompts (not "enhanced_prompts")
-  // - refine_prompt: Refined prompts (not "refined_prompts")
-  let query = `
-    SELECT 
+  const selectCols = `
+    SELECT
       up.prompt_id,
       up.user_id,
       up.user_prompt,
@@ -224,40 +256,17 @@ export async function getAnalyticsData(
       u.name as user_name,
       u.email as user_email,
       u.installed
-    FROM user_prompts up
-    LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
-    LEFT JOIN refine_prompt rp ON sep.enhanced_prompt_id = rp.enhanced_prompt_id
-    LEFT JOIN usertable u ON up.user_id = u.user_id
-    LEFT JOIN userstatus us ON up.user_id = us.user_id
   `;
 
-  const conditions = [];
   const params = [];
+  const conditions = [];
 
-  if (startDate) {
-    params.push(startDate.toISOString());
-    conditions.push(`up.created_at >= $${params.length}`);
-  }
-
-  if (endDate) {
-    params.push(endDate.toISOString());
-    conditions.push(`up.created_at <= $${params.length}`);
-  }
-
-  // Source filtering based on llm_used
-  if (source === "Chat") {
-    params.push("velocity");
-    conditions.push(`sep.llm_used ILIKE $${params.length}`);
-  } else if (source === "Extension") {
-    params.push("velocity");
-    conditions.push(
-      `(sep.llm_used NOT ILIKE $${params.length} OR sep.llm_used IS NULL)`,
-    );
-  }
-
+  addDateSourceFilters(params, conditions, { startDate, endDate, source });
   pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
     conditions.push(c),
   );
+
+  let query = selectCols + BASE_PROMPT_FROM_JOINS;
 
   if (conditions.length > 0) {
     query += ` WHERE ${conditions.join(" AND ")}`;
@@ -354,6 +363,151 @@ export async function getPriorPaidUsers(
 
   const rows = await executeQuery(query, params);
   return rows.map((r) => r.user_id);
+}
+
+// Get all paid users with full details (for Paid Users page)
+export async function getAllPaidUsersDetail(excludeUsers = TEST_USER_IDS, excludeEmails = []) {
+  const params = [];
+  const conditions = [
+    `(LOWER(COALESCE(us.status, '')) LIKE '%paid%' OR LOWER(COALESCE(us.status, '')) LIKE '%pro%' OR LOWER(COALESCE(us.status, '')) LIKE '%premium%')`,
+  ];
+
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
+
+  if (excludeEmails.length > 0) {
+    const placeholders = excludeEmails.map((_, i) => `$${params.length + i + 1}`);
+    excludeEmails.forEach((e) => params.push(e.toLowerCase()));
+    conditions.push(`LOWER(TRIM(COALESCE(u.email, ''))) NOT IN (${placeholders.join(", ")})`);
+  }
+
+  const query = `
+    SELECT
+      u.user_id,
+      u.name,
+      u.email,
+      us.status,
+      u.created_at::date   AS joined_date,
+      COUNT(up.prompt_id)  AS total_prompts,
+      MAX(up.created_at)::date AS last_active
+    FROM usertable u
+    JOIN userstatus us ON u.user_id = us.user_id
+    LEFT JOIN user_prompts up ON u.user_id = up.user_id
+    WHERE ${conditions.join(" AND ")}
+    GROUP BY u.user_id, u.name, u.email, us.status, u.created_at
+    ORDER BY MAX(up.created_at) DESC NULLS LAST
+  `;
+
+  return executeQuery(query, params);
+}
+
+// Deep analytics for paid users — time-of-day, DOW, intent, domain, complexity, mode, daily trend
+export async function getPaidUsersAnalytics(excludeUsers = TEST_USER_IDS, excludeEmails = []) {
+  const params = [];
+  const conditions = [
+    `(LOWER(COALESCE(us.status, '')) LIKE '%paid%' OR LOWER(COALESCE(us.status, '')) LIKE '%pro%' OR LOWER(COALESCE(us.status, '')) LIKE '%premium%')`,
+  ];
+
+  pushUsertableExclusionConditions(params, excludeUsers, "u").forEach((c) =>
+    conditions.push(c),
+  );
+
+  if (excludeEmails.length > 0) {
+    const placeholders = excludeEmails.map((_, i) => `$${params.length + i + 1}`);
+    excludeEmails.forEach((e) => params.push(e.toLowerCase()));
+    conditions.push(`LOWER(TRIM(COALESCE(u.email, ''))) NOT IN (${placeholders.join(", ")})`);
+  }
+
+  const baseJoins = `
+    FROM user_prompts up
+    JOIN usertable u ON up.user_id = u.user_id
+    JOIN userstatus us ON up.user_id = us.user_id
+    LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
+  `;
+  const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+  const hourlyQuery = `
+    SELECT EXTRACT(HOUR FROM up.created_at)::int AS hour, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY hour ORDER BY hour ASC
+  `;
+
+  const dowQuery = `
+    SELECT EXTRACT(DOW FROM up.created_at)::int AS dow, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY dow ORDER BY dow ASC
+  `;
+
+  const intentQuery = `
+    SELECT COALESCE(NULLIF(sep.intent, ''), 'Unknown') AS intent, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY intent ORDER BY count DESC LIMIT 10
+  `;
+
+  const domainQuery = `
+    SELECT COALESCE(NULLIF(sep.domain, ''), 'Unknown') AS domain, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY domain ORDER BY count DESC LIMIT 10
+  `;
+
+  const complexityQuery = `
+    SELECT COALESCE(NULLIF(sep.complexity, ''), 'Unknown') AS complexity, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY complexity ORDER BY count DESC
+  `;
+
+  const modeQuery = `
+    SELECT COALESCE(NULLIF(sep.mode, ''), 'Unknown') AS mode, COUNT(*) AS count
+    ${baseJoins} ${whereClause}
+    GROUP BY mode ORDER BY count DESC
+  `;
+
+  const tokenQuery = `
+    SELECT
+      ROUND(AVG(COALESCE(sep.total_token, 0)))::int AS avg_total_tokens,
+      ROUND(AVG(COALESCE(sep.input_token, 0)))::int AS avg_input_tokens,
+      ROUND(AVG(COALESCE(sep.output_token, 0)))::int AS avg_output_tokens,
+      SUM(COALESCE(sep.total_token, 0))::bigint AS sum_tokens
+    ${baseJoins} ${whereClause}
+  `;
+
+  // Daily trend — 90-day window; append extra param to params copy
+  const dailyParams = [...params];
+  dailyParams.push(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+  const dateIdx = dailyParams.length;
+  const dailyQuery = `
+    SELECT DATE(up.created_at) AS date, COUNT(*) AS prompts, COUNT(DISTINCT up.user_id) AS active_users
+    ${baseJoins} ${whereClause} AND up.created_at >= $${dateIdx}
+    GROUP BY DATE(up.created_at) ORDER BY date ASC
+  `;
+
+  const [hourly, dow, intents, domains, complexities, modes, tokens, daily] =
+    await Promise.all([
+      executeQuery(hourlyQuery, params),
+      executeQuery(dowQuery, params),
+      executeQuery(intentQuery, params),
+      executeQuery(domainQuery, params),
+      executeQuery(complexityQuery, params),
+      executeQuery(modeQuery, params),
+      executeQuery(tokenQuery, params),
+      executeQuery(dailyQuery, dailyParams),
+    ]);
+
+  return {
+    hourly: hourly.map((r) => ({ hour: r.hour, count: parseInt(r.count) })),
+    dow: dow.map((r) => ({ dow: r.dow, count: parseInt(r.count) })),
+    intents: intents.map((r) => ({ name: r.intent, value: parseInt(r.count) })),
+    domains: domains.map((r) => ({ name: r.domain, value: parseInt(r.count) })),
+    complexities: complexities.map((r) => ({ name: r.complexity, value: parseInt(r.count) })),
+    modes: modes.map((r) => ({ name: r.mode, value: parseInt(r.count) })),
+    tokens: tokens[0] || { avg_total_tokens: 0, avg_input_tokens: 0, avg_output_tokens: 0, sum_tokens: 0 },
+    daily: daily.map((r) => ({
+      date: new Date(r.date).toISOString().slice(0, 10),
+      prompts: parseInt(r.prompts),
+      active_users: parseInt(r.active_users),
+    })),
+  };
 }
 
 // Get attrition data with filters
@@ -824,35 +978,13 @@ export async function getUsageBehaviorData(
   pushPromptTableExclusionConditions(params, excludeUsers, "up").forEach((c) =>
     conditions.push(c),
   );
+  addDateSourceFilters(params, conditions, { startDate, endDate, source });
 
-  // Date filtering
-  if (startDate) {
-    params.push(startDate.toISOString());
-    conditions.push(`up.created_at >= $${params.length}`);
-  }
-
-  if (endDate) {
-    params.push(endDate.toISOString());
-    conditions.push(`up.created_at <= $${params.length}`);
-  }
-
-  // Source filtering logic
-  let sourceJoin = "";
-  if (source === "Chat") {
-    params.push("velocity");
-    conditions.push(`sep.llm_used ILIKE $${params.length}`);
-    sourceJoin = "JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id";
-  } else if (source === "Extension") {
-    params.push("velocity");
-    conditions.push(
-      `(sep.llm_used NOT ILIKE $${params.length} OR sep.llm_used IS NULL)`,
-    );
-    sourceJoin =
-      "LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id";
-  } else {
-    sourceJoin =
-      "LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id";
-  }
+  // For the inner UserStats CTE, Chat requires an inner JOIN to enforce source
+  const innerJoin =
+    source === "Chat"
+      ? "JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id"
+      : "LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id";
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -860,13 +992,13 @@ export async function getUsageBehaviorData(
   // This query gets every prompt with its user context to calculate behavioral metrics
   const query = `
     WITH UserStats AS (
-      SELECT 
+      SELECT
         up.user_id,
         COUNT(up.prompt_id) as total_prompts,
         MIN(up.created_at) as first_active,
         MAX(up.created_at) as last_active
       FROM user_prompts up
-      ${sourceJoin}
+      ${innerJoin}
       ${whereClause}
       GROUP BY up.user_id
     ),
@@ -1183,6 +1315,9 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
     moderationRows,
     queueRows,
     enterpriseOptionsRows,
+    userActivityRows,
+    hourlyActivityRows,
+    dowActivityRows,
   ] = await Promise.all([
     executeEnterpriseQuery(
       `
@@ -1338,6 +1473,52 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
       `,
       [],
     ),
+    // Hourly activity distribution
+    executeEnterpriseQuery(
+      `
+      SELECT EXTRACT(HOUR FROM up."createdAt")::int AS hour, COUNT(*) AS count
+      FROM "UserPrompt" up
+      ${promptWhereClause}
+      GROUP BY hour ORDER BY hour ASC
+      `,
+      params,
+    ).catch(() => []),
+    // Day-of-week activity distribution
+    executeEnterpriseQuery(
+      `
+      SELECT EXTRACT(DOW FROM up."createdAt")::int AS dow, COUNT(*) AS count
+      FROM "UserPrompt" up
+      ${promptWhereClause}
+      GROUP BY dow ORDER BY dow ASC
+      `,
+      params,
+    ).catch(() => []),
+    // Per-user activity — only meaningful when scoped to a single enterprise
+    enterpriseParamIndex
+      ? executeEnterpriseQuery(
+          `
+          SELECT
+            u."id"::text AS "userId",
+            COALESCE(u."name", '') AS "name",
+            COALESCE(u."email", '') AS "email",
+            u."isActive",
+            u."createdAt" AS "joinedAt",
+            COUNT(up."id") AS "promptCount",
+            MAX(up."createdAt") AS "lastActive"
+          FROM "User" u
+          LEFT JOIN "UserPrompt" up
+            ON up."userId" = u."id"
+            ${startDate ? `AND up."createdAt" >= $1::timestamptz` : ""}
+            ${endDate ? `AND up."createdAt" <= $${startDate ? 2 : 1}::timestamptz` : ""}
+          WHERE u."deletedAt" IS NULL
+            AND u."enterpriseId" = $${enterpriseParamIndex}::bigint
+          GROUP BY u."id", u."name", u."email", u."isActive", u."createdAt"
+          ORDER BY COUNT(up."id") DESC
+          LIMIT 100
+          `,
+          params,
+        ).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -1349,6 +1530,9 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
     moderationActions: moderationRows,
     queueStatus: queueRows,
     enterpriseOptions: enterpriseOptionsRows,
+    userActivity: userActivityRows,
+    hourlyActivity: hourlyActivityRows.map((r) => ({ hour: r.hour, count: parseInt(r.count) })),
+    dowActivity: dowActivityRows.map((r) => ({ dow: r.dow, count: parseInt(r.count) })),
   };
 }
 

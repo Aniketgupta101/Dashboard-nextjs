@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAnalyticsData } from "@/lib/db";
-
-const TEST_USER_IDS = [];
+import { TEST_USER_IDS } from "@/lib/constants";
 
 export async function GET(request) {
   try {
@@ -53,6 +52,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      _meta: { source: "consume_db/user_prompts" },
       data: {
         ...dailyHabitData,
         dailyTrend: dailyTrendData,
