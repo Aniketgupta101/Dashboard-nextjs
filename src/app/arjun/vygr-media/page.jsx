@@ -37,6 +37,7 @@ import {
 } from "recharts";
 
 const VYGR_ENTERPRISE_ID = "95";
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const PIE_COLORS = [
   "#3b82f6",
@@ -235,8 +236,6 @@ export default function VygrMediaPage() {
     name: q.status,
     value: q.count,
   }));
-
-  const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const hourlyData = useMemo(
     () =>
@@ -569,14 +568,7 @@ export default function VygrMediaPage() {
                     <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={3} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="count" name="Prompts" radius={[3, 3, 0, 0]}>
-                      {hourlyData.map((_, i) => (
-                        <Cell
-                          key={i}
-                          fill={i >= 9 && i <= 17 ? COLORS.primary : `${COLORS.primary}40`}
-                        />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="count" name="Prompts" fill={COLORS.primary} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
               </ChartCard>

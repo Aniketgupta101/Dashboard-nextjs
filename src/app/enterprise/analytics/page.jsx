@@ -114,6 +114,7 @@ function TabContextPanel({ tabId }) {
   );
 }
 
+
 function StatCard({ title, value, subtitle, icon: Icon, tooltip }) {
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 p-4 backdrop-blur-sm">
@@ -408,7 +409,7 @@ export default function EnterpriseAnalyticsPage() {
         <>
           {tab === "overview" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Prompts per day vs DAU"
                 tooltip={
                   <>
@@ -455,7 +456,7 @@ export default function EnterpriseAnalyticsPage() {
                 </ChartContainer>
               </ChartCard>
 
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Event volume (all sources)"
                 tooltip={
                   <>
@@ -498,7 +499,7 @@ export default function EnterpriseAnalyticsPage() {
                 </ChartContainer>
               </ChartCard>
 
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Engagement index"
                 tooltip={
                   <>
@@ -522,7 +523,7 @@ export default function EnterpriseAnalyticsPage() {
                 </p>
               </ChartCard>
 
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Top events"
                 tooltip={
                   <>
@@ -564,7 +565,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "acquisition" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Auth funnel (named events)"
                 tooltip={
                   <>
@@ -585,7 +586,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No auth events in range â€” instrument page_viewed_landing, login_success, etc."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Login failures by error_type"
                 tooltip={
                   <>
@@ -605,7 +606,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No login_failed events â€” track error_type (e.g. no_team)."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Login method (SSO vs manual)"
                 tooltip={
                   <>
@@ -630,7 +631,7 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="CTR & funnel next steps"
                 tooltip={
                   <>
@@ -654,7 +655,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "prompts" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Model usage"
                 tooltip={
                   <>
@@ -681,7 +682,7 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Speed mode"
                 tooltip={
                   <>
@@ -708,7 +709,7 @@ export default function EnterpriseAnalyticsPage() {
                   </BarChart>
                 </ChartContainer>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Starter prompt funnel"
                 tooltip={
                   <>
@@ -726,7 +727,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No starter_prompt_* events yet."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Attachment usage"
                 tooltip={
                   <>
@@ -758,7 +759,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "governance" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Governance & compliance events"
                 tooltip={
                   <>
@@ -780,7 +781,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No governance events â€” instrument prompt_flagged_by_system, review flows, VYGR-specific flags."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Policy center toggles"
                 tooltip={
                   <>
@@ -805,7 +806,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No policy toggles recorded."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Audit & risk summary"
                 tooltip={
                   <>
@@ -839,7 +840,7 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Review queue & resolution"
                 tooltip={
                   <>
@@ -860,7 +861,7 @@ export default function EnterpriseAnalyticsPage() {
 
           {tab === "engagement" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Personalization"
                 tooltip={
                   <>
@@ -892,7 +893,7 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Notifications"
                 tooltip={
                   <>
@@ -917,7 +918,7 @@ export default function EnterpriseAnalyticsPage() {
                   </li>
                 </ul>
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="CSV exports (History / Audit)"
                 tooltip={
                   <>
@@ -938,7 +939,7 @@ export default function EnterpriseAnalyticsPage() {
                   empty="No csv_exported events."
                 />
               </ChartCard>
-              <ChartCard source=posthog
+              <ChartCard source="posthog"
                 title="Role at login"
                 tooltip={
                   <>
@@ -972,4 +973,3 @@ export default function EnterpriseAnalyticsPage() {
     </div>
   );
 }
-
