@@ -9,6 +9,8 @@ import {
   Zap,
   TrendingUp,
   RefreshCw,
+  AlertTriangle,
+  MousePointerClick,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,6 +24,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AreaChart,
   Area,
@@ -126,6 +135,202 @@ function PieTooltip({ active, payload }) {
   );
 }
 
+function fmtDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function buildPaidActionables(users, analytics) {
+  const totalUsers = users.length;
+  const totalPrompts = users.reduce((sum, user) => sum + user.totalPrompts, 0);
+  const topIntent = analytics.intents?.[0];
+  const unknown = analytics.unknownIntent || {};
+  const unknownCount =
+    Number(unknown.missing_enhance_row || 0) +
+    Number(unknown.null_intent || 0) +
+    Number(unknown.empty_intent || 0);
+  const unknownRate =
+    Number(unknown.prompts || 0) > 0
+      ? Math.round((unknownCount / Number(unknown.prompts)) * 100)
+      : 0;
+  const dormantUsers = users.filter((user) => !user.lastActive).length;
+  const powerUsers = users.filter((user) => user.totalPrompts >= 20).length;
+  const topHour = (analytics.hourly || []).reduce(
+    (best, row) => (Number(row.count) > Number(best?.count || 0) ? row : best),
+    null,
+  );
+
+  return [
+    {
+      title: "Reduce Unknown intent at capture time",
+      metric: `${unknownCount.toLocaleString()} prompts (${unknownRate}%)`,
+      action:
+        "Unknown is mostly prompts without a save_enhance_prompt row, so instrument the failed/skipped enhancement path and store a reason code before the LLM response is attempted.",
+      tone: unknownRate >= 10 ? "text-amber-500" : "text-muted-foreground",
+    },
+    {
+      title: "Build around the dominant paid use case",
+      metric: topIntent ? `${topIntent.name}: ${topIntent.value}` : "No intent data",
+      action: topIntent
+        ? `Use ${topIntent.name} as the first paid-user workflow to template, educate, and measure. The chart says this is where paid users are already pulling value.`
+        : "No strong intent pattern is visible yet; prioritize instrumentation coverage before deciding on workflow bets.",
+      tone: "text-blue-500",
+    },
+    {
+      title: "Separate expansion from rescue work",
+      metric: `${powerUsers}/${totalUsers} power users`,
+      action:
+        powerUsers > 0
+          ? "Interview high-volume users for repeat workflows and convert those into saved starters, then treat low/no-prompt paid users as onboarding recovery."
+          : "Prompt depth is thin across paid users; the immediate action is onboarding recovery, not new advanced features.",
+      tone: "text-green-500",
+    },
+    {
+      title: "Time lifecycle nudges around real usage",
+      metric: topHour ? `${String(topHour.hour).padStart(2, "0")}:00 peak` : "No hourly peak",
+      action:
+        topHour && totalPrompts > 0
+          ? "Schedule lifecycle emails, in-app prompts, and support reach-outs around the peak usage window instead of sending generic daily nudges."
+          : "Wait for more prompt volume before using time-based nudges.",
+      tone: "text-purple-500",
+    },
+    {
+      title: "Find paid users who never activated",
+      metric: `${dormantUsers} users without prompts`,
+      action:
+        dormantUsers > 0
+          ? "Click dormant users in the roster and inspect signup metadata; they likely need install, onboarding, or first-prompt intervention."
+          : "All paid users have at least one prompt, so focus retention analysis on recent inactivity and declining prompt frequency.",
+      tone: "text-orange-500",
+    },
+  ];
+}
+
+function UserDetailSheet({ open, onOpenChange, user, detail, loading, error }) {
+  const summary = detail?.summary || {};
+  const profile = detail?.profile || user || {};
+  const unknown = detail?.unknownIntent || {};
+  const hourlyData = Array.from({ length: 24 }, (_, i) => ({
+    hour: `${String(i).padStart(2, "0")}:00`,
+    count: detail?.hourly?.find((h) => h.hour === i)?.count || 0,
+  }));
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+        <SheetHeader className="border-b border-border/50 pr-10">
+          <SheetTitle>{profile.name || "Paid user"}</SheetTitle>
+          <SheetDescription>{profile.email || "No email"}</SheetDescription>
+        </SheetHeader>
+
+        {loading ? (
+          <div className="space-y-4 p-4">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-52 rounded-xl" />
+            <Skeleton className="h-52 rounded-xl" />
+          </div>
+        ) : error ? (
+          <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        ) : detail ? (
+          <div className="space-y-5 p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard label="Prompts" value={summary.prompts || 0} icon={MessageSquare} />
+              <StatCard label="Enhanced" value={`${summary.enhancementRate || 0}%`} sub={`${summary.enhancedPrompts || 0} prompts`} icon={Zap} />
+              <StatCard label="Refined" value={`${summary.refinementRate || 0}%`} sub={`${summary.refinements || 0} refinements`} icon={RefreshCw} />
+              <StatCard label="Active Days" value={summary.activeDays || 0} icon={Clock} />
+            </div>
+
+            <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Behavior pattern
+              </p>
+              <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                <p>Joined: <span className="text-muted-foreground">{fmtDate(profile.joinedAt)}</span></p>
+                <p>Last active: <span className="text-muted-foreground">{fmtDate(summary.lastActive)}</span></p>
+                <p>Status: <span className="text-muted-foreground">{profile.status || "—"}</span></p>
+                <p>LLM platform: <span className="text-muted-foreground">{profile.llmPlatform || "—"}</span></p>
+                <p>Occupation: <span className="text-muted-foreground">{profile.occupation || "—"}</span></p>
+                <p>Unknown intent causes: <span className="text-muted-foreground">{Number(unknown.missing_enhance_row || 0)} missing enhancement rows</span></p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartBox title="90-day prompt trend">
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={detail.daily || []}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="prompts" stroke="#3b82f6" fill="#3b82f633" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartBox>
+
+              <ChartBox title="Prompts by hour">
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={hourlyData} margin={{ left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={5} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="count" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartBox>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {[
+                ["Intent mix", detail.intents],
+                ["Domain mix", detail.domains],
+                ["Mode mix", detail.modes],
+              ].map(([title, rows]) => (
+                <ChartBox key={title} title={title}>
+                  {rows?.length ? (
+                    <div className="space-y-2">
+                      {rows.slice(0, 5).map((row, idx) => (
+                        <div key={row.name} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="truncate text-muted-foreground">{row.name}</span>
+                          <span className="font-mono">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No data</p>
+                  )}
+                </ChartBox>
+              ))}
+            </div>
+
+            <ChartBox title="Recent prompts">
+              <div className="space-y-3">
+                {(detail.recentPrompts || []).map((prompt) => (
+                  <div key={prompt.prompt_id} className="rounded-lg border border-border/40 bg-background/60 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>{fmtDate(prompt.created_at)}</span>
+                      <Badge variant="outline" className="text-[10px]">{prompt.intent}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{prompt.mode}</Badge>
+                      <span>{prompt.total_token || 0} tokens</span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{prompt.prompt || "No prompt text"}</p>
+                  </div>
+                ))}
+              </div>
+            </ChartBox>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ── main page ──────────────────────────────────────────────────────────────
 export default function PaidUsersPage() {
   const [data, setData] = useState(null);
@@ -133,6 +338,10 @@ export default function PaidUsersPage() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "totalPrompts", dir: "desc" });
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -151,6 +360,7 @@ export default function PaidUsersPage() {
 
   const users = data?.users || [];
   const an = data?.analytics || {};
+  const actionables = useMemo(() => buildPaidActionables(users, an), [users, an]);
 
   // Derived stats
   const totalPrompts = useMemo(() => users.reduce((s, u) => s + u.totalPrompts, 0), [users]);
@@ -207,6 +417,21 @@ export default function PaidUsersPage() {
         ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
         : { key, dir: "desc" },
     );
+
+  const openUserDetail = (user) => {
+    setSelectedUser(user);
+    setUserDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    fetch(`/api/arjun/paid-users/${encodeURIComponent(user.userId)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setUserDetail(json.data);
+        else setDetailError(json.error || "Unable to load user detail");
+      })
+      .catch((e) => setDetailError(e.message))
+      .finally(() => setDetailLoading(false));
+  };
 
   // Chart data preparation
   const hourlyData = useMemo(
@@ -298,6 +523,55 @@ export default function PaidUsersPage() {
       </section>
 
       {/* ── Activity over time ── */}
+      <section>
+        <SectionHeading>Insight Actionables</SectionHeading>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {actionables.map((item) => (
+            <div
+              key={item.title}
+              className="rounded-xl border border-border/50 bg-card/60 p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className={`mt-1 text-lg font-semibold ${item.tone}`}>
+                    {item.metric}
+                  </p>
+                </div>
+                <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                {item.action}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading>Unknown Intent Explanation</SectionHeading>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="space-y-2 text-sm">
+              <p className="font-medium text-foreground">
+                Unknown means the prompt has no intent available from
+                save_enhance_prompt.
+              </p>
+              <p className="text-muted-foreground">
+                The likely case is that an enhancement row was never written for
+                those prompts, not that an existing row stored a blank intent.
+                Current breakdown:{" "}
+                {Number(an.unknownIntent?.missing_enhance_row || 0).toLocaleString()} missing
+                enhancement rows,{" "}
+                {Number(an.unknownIntent?.null_intent || 0).toLocaleString()} null intents, and{" "}
+                {Number(an.unknownIntent?.empty_intent || 0).toLocaleString()} empty intents.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section>
         <SectionHeading>Activity Trend (last 90 days)</SectionHeading>
         <ChartBox title="Daily Prompts & Active Paid Users">
@@ -489,9 +763,22 @@ export default function PaidUsersPage() {
                     sorted.map((u) => (
                       <TableRow
                         key={u.userId}
-                        className="even:bg-muted/20 hover:bg-muted/40 transition-colors"
+                        className="cursor-pointer even:bg-muted/20 hover:bg-muted/40 transition-colors"
+                        onClick={() => openUserDetail(u)}
+                        title="Open user behavior detail"
                       >
-                        <TableCell className="font-medium">{u.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <button
+                            type="button"
+                            className="text-left underline-offset-4 hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openUserDetail(u);
+                            }}
+                          >
+                            {u.name}
+                          </button>
+                        </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {u.email}
                         </TableCell>
@@ -523,6 +810,17 @@ export default function PaidUsersPage() {
           </p>
         </div>
       </section>
+
+      <UserDetailSheet
+        open={Boolean(selectedUser)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUser(null);
+        }}
+        user={selectedUser}
+        detail={userDetail}
+        loading={detailLoading}
+        error={detailError}
+      />
     </div>
   );
 }

@@ -472,6 +472,22 @@ export async function getPaidUsersAnalytics(excludeUsers = TEST_USER_IDS, exclud
     ${baseJoins} ${whereClause}
   `;
 
+  const unknownIntentQuery = `
+    SELECT
+      COUNT(*)::int AS prompts,
+      COUNT(*) FILTER (WHERE sep.prompt_id IS NULL)::int AS missing_enhance_row,
+      COUNT(*) FILTER (
+        WHERE sep.prompt_id IS NOT NULL AND sep.intent IS NULL
+      )::int AS null_intent,
+      COUNT(*) FILTER (
+        WHERE sep.prompt_id IS NOT NULL AND BTRIM(sep.intent) = ''
+      )::int AS empty_intent,
+      COUNT(*) FILTER (
+        WHERE sep.prompt_id IS NOT NULL AND NULLIF(BTRIM(sep.intent), '') IS NOT NULL
+      )::int AS known_intent
+    ${baseJoins} ${whereClause}
+  `;
+
   // Daily trend — 90-day window; append extra param to params copy
   const dailyParams = [...params];
   dailyParams.push(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
@@ -482,7 +498,17 @@ export async function getPaidUsersAnalytics(excludeUsers = TEST_USER_IDS, exclud
     GROUP BY DATE(up.created_at) ORDER BY date ASC
   `;
 
-  const [hourly, dow, intents, domains, complexities, modes, tokens, daily] =
+  const [
+    hourly,
+    dow,
+    intents,
+    domains,
+    complexities,
+    modes,
+    tokens,
+    daily,
+    unknownIntent,
+  ] =
     await Promise.all([
       executeQuery(hourlyQuery, params),
       executeQuery(dowQuery, params),
@@ -492,6 +518,7 @@ export async function getPaidUsersAnalytics(excludeUsers = TEST_USER_IDS, exclud
       executeQuery(modeQuery, params),
       executeQuery(tokenQuery, params),
       executeQuery(dailyQuery, dailyParams),
+      executeQuery(unknownIntentQuery, params),
     ]);
 
   return {
@@ -502,11 +529,396 @@ export async function getPaidUsersAnalytics(excludeUsers = TEST_USER_IDS, exclud
     complexities: complexities.map((r) => ({ name: r.complexity, value: parseInt(r.count) })),
     modes: modes.map((r) => ({ name: r.mode, value: parseInt(r.count) })),
     tokens: tokens[0] || { avg_total_tokens: 0, avg_input_tokens: 0, avg_output_tokens: 0, sum_tokens: 0 },
+    unknownIntent: unknownIntent[0] || {
+      prompts: 0,
+      missing_enhance_row: 0,
+      null_intent: 0,
+      empty_intent: 0,
+      known_intent: 0,
+    },
     daily: daily.map((r) => ({
       date: new Date(r.date).toISOString().slice(0, 10),
       prompts: parseInt(r.prompts),
       active_users: parseInt(r.active_users),
     })),
+  };
+}
+
+export async function getPaidUserBehavior(userId) {
+  const params = [String(userId)];
+  const baseJoins = `
+    FROM user_prompts up
+    JOIN usertable u ON up.user_id = u.user_id
+    LEFT JOIN userstatus us ON up.user_id = us.user_id
+    LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
+  `;
+  const whereClause = "WHERE up.user_id::text = $1";
+
+  const [
+    profileRows,
+    summaryRows,
+    dailyRows,
+    intentRows,
+    domainRows,
+    modeRows,
+    hourlyRows,
+    recentRows,
+    unknownRows,
+  ] = await Promise.all([
+    executeQuery(
+      `
+      SELECT
+        u.user_id,
+        u.name,
+        u.email,
+        u.created_at AS joined_at,
+        u.installed,
+        u.onboarding_completed,
+        u.occupation,
+        u.llm_platform,
+        COALESCE(us.status, 'free') AS status
+      FROM usertable u
+      LEFT JOIN userstatus us ON u.user_id = us.user_id
+      WHERE u.user_id::text = $1
+      LIMIT 1
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT
+        COUNT(up.prompt_id)::int AS prompts,
+        COUNT(DISTINCT DATE(up.created_at))::int AS active_days,
+        MIN(up.created_at) AS first_active,
+        MAX(up.created_at) AS last_active,
+        COUNT(rp.refine_id)::int AS refinements,
+        ROUND(AVG(COALESCE(sep.total_token, 0)))::int AS avg_tokens,
+        SUM(COALESCE(sep.total_token, 0))::bigint AS total_tokens,
+        COUNT(*) FILTER (WHERE sep.enhanced_prompt_id IS NOT NULL)::int AS enhanced_prompts
+      ${baseJoins}
+      LEFT JOIN refine_prompt rp ON sep.enhanced_prompt_id = rp.enhanced_prompt_id
+      ${whereClause}
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT DATE(up.created_at) AS date, COUNT(*)::int AS prompts
+      ${baseJoins}
+      ${whereClause}
+        AND up.created_at >= NOW() - INTERVAL '90 days'
+      GROUP BY DATE(up.created_at)
+      ORDER BY DATE(up.created_at) ASC
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(sep.intent), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      ${baseJoins} ${whereClause}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(sep.domain), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      ${baseJoins} ${whereClause}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(sep.mode), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      ${baseJoins} ${whereClause}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT EXTRACT(HOUR FROM up.created_at)::int AS hour, COUNT(*)::int AS count
+      ${baseJoins} ${whereClause}
+      GROUP BY hour
+      ORDER BY hour ASC
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT
+        up.prompt_id,
+        up.created_at,
+        LEFT(COALESCE(up.user_prompt, ''), 240) AS prompt,
+        COALESCE(NULLIF(BTRIM(sep.intent), ''), 'Unknown') AS intent,
+        COALESCE(NULLIF(BTRIM(sep.mode), ''), 'Unknown') AS mode,
+        COALESCE(NULLIF(BTRIM(sep.domain), ''), 'Unknown') AS domain,
+        COALESCE(sep.total_token, 0)::int AS total_token,
+        sep.enhanced_prompt_id IS NOT NULL AS enhanced
+      ${baseJoins}
+      ${whereClause}
+      ORDER BY up.created_at DESC
+      LIMIT 12
+      `,
+      params,
+    ),
+    executeQuery(
+      `
+      SELECT
+        COUNT(*) FILTER (WHERE sep.prompt_id IS NULL)::int AS missing_enhance_row,
+        COUNT(*) FILTER (
+          WHERE sep.prompt_id IS NOT NULL AND COALESCE(NULLIF(BTRIM(sep.intent), ''), '') = ''
+        )::int AS blank_intent
+      ${baseJoins} ${whereClause}
+      `,
+      params,
+    ),
+  ]);
+
+  return {
+    profile: profileRows[0] || null,
+    summary: summaryRows[0] || {},
+    daily: dailyRows.map((r) => ({
+      date: new Date(r.date).toISOString().slice(0, 10),
+      prompts: parseInt(r.prompts || 0, 10),
+    })),
+    intents: intentRows,
+    domains: domainRows,
+    modes: modeRows,
+    hourly: hourlyRows.map((r) => ({
+      hour: parseInt(r.hour || 0, 10),
+      count: parseInt(r.count || 0, 10),
+    })),
+    recentPrompts: recentRows,
+    unknownIntent: unknownRows[0] || { missing_enhance_row: 0, blank_intent: 0 },
+  };
+}
+
+export async function getConsumerUsageForEmails(emails = [], startDate = null, endDate = null) {
+  const normalizedEmails = [...new Set(
+    emails
+      .map((email) => String(email || "").trim().toLowerCase())
+      .filter(Boolean),
+  )];
+
+  if (normalizedEmails.length === 0) return [];
+
+  const params = [normalizedEmails];
+  const dateConditions = [];
+  if (startDate) {
+    params.push(startDate.toISOString());
+    dateConditions.push(`up.created_at >= $${params.length}::timestamptz`);
+  }
+  if (endDate) {
+    params.push(endDate.toISOString());
+    dateConditions.push(`up.created_at <= $${params.length}::timestamptz`);
+  }
+  const dateWhere =
+    dateConditions.length > 0 ? `AND ${dateConditions.join(" AND ")}` : "";
+
+  return executeQuery(
+    `
+    SELECT
+      LOWER(TRIM(u.email)) AS email,
+      u.user_id,
+      u.name,
+      COALESCE(us.status, 'free') AS status,
+      COUNT(up.prompt_id)::int AS consumer_prompts,
+      COUNT(DISTINCT DATE(up.created_at))::int AS consumer_active_days,
+      MAX(up.created_at) AS consumer_last_active,
+      COUNT(*) FILTER (WHERE sep.enhanced_prompt_id IS NOT NULL)::int AS consumer_enhanced_prompts,
+      COALESCE(SUM(sep.total_token), 0)::bigint AS consumer_tokens
+    FROM usertable u
+    LEFT JOIN userstatus us ON u.user_id = us.user_id
+    LEFT JOIN user_prompts up
+      ON up.user_id = u.user_id
+      ${dateWhere}
+    LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
+    WHERE LOWER(TRIM(u.email)) = ANY($1::text[])
+    GROUP BY LOWER(TRIM(u.email)), u.user_id, u.name, us.status
+    ORDER BY consumer_prompts DESC
+    `,
+    params,
+  );
+}
+
+export async function getEnterpriseUserBehavior({
+  enterpriseId,
+  userId,
+  startDate = null,
+  endDate = null,
+}) {
+  const params = [String(enterpriseId), String(userId)];
+  const promptDateConditions = [];
+  if (startDate) {
+    params.push(startDate.toISOString());
+    promptDateConditions.push(`up."createdAt" >= $${params.length}::timestamptz`);
+  }
+  if (endDate) {
+    params.push(endDate.toISOString());
+    promptDateConditions.push(`up."createdAt" <= $${params.length}::timestamptz`);
+  }
+  const promptDateJoin =
+    promptDateConditions.length > 0
+      ? `AND ${promptDateConditions.join(" AND ")}`
+      : "";
+
+  const epDateConditions = [];
+  if (startDate) epDateConditions.push(`ep."createdAt" >= $3::timestamptz`);
+  if (endDate)
+    epDateConditions.push(`ep."createdAt" <= $${startDate ? 4 : 3}::timestamptz`);
+  const epDateWhere =
+    epDateConditions.length > 0 ? `AND ${epDateConditions.join(" AND ")}` : "";
+
+  const [
+    profileRows,
+    summaryRows,
+    dailyRows,
+    intentRows,
+    domainRows,
+    modeRows,
+    recentRows,
+  ] = await Promise.all([
+    executeEnterpriseQuery(
+      `
+      SELECT
+        u."id"::text AS "userId",
+        u."name",
+        u."email",
+        u."isActive",
+        u."createdAt" AS "joinedAt",
+        e."name" AS "enterpriseName",
+        e."slug" AS "enterpriseSlug"
+      FROM "User" u
+      JOIN "Enterprise" e ON e."id" = u."enterpriseId"
+      WHERE u."enterpriseId" = $1::bigint
+        AND u."id" = $2::bigint
+        AND u."deletedAt" IS NULL
+      LIMIT 1
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT
+        COUNT(up."id")::int AS "enterprisePrompts",
+        COUNT(DISTINCT DATE(up."createdAt"))::int AS "enterpriseActiveDays",
+        MIN(up."createdAt") AS "firstActive",
+        MAX(up."createdAt") AS "lastActive",
+        COUNT(ep."id")::int AS "enhancedPrompts",
+        ROUND(AVG(COALESCE(ep."totalToken", 0)))::int AS "avgTokens",
+        COALESCE(SUM(ep."totalToken"), 0)::bigint AS "totalTokens"
+      FROM "User" u
+      LEFT JOIN "UserPrompt" up
+        ON up."userId" = u."id"
+        AND up."enterpriseId" = u."enterpriseId"
+        ${promptDateJoin}
+      LEFT JOIN "EnhancedPrompt" ep ON ep."promptId" = up."id"
+      WHERE u."enterpriseId" = $1::bigint
+        AND u."id" = $2::bigint
+        AND u."deletedAt" IS NULL
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT DATE(up."createdAt") AS date, COUNT(*)::int AS prompts
+      FROM "UserPrompt" up
+      WHERE up."enterpriseId" = $1::bigint
+        AND up."userId" = $2::bigint
+        ${promptDateConditions.length > 0 ? `AND ${promptDateConditions.join(" AND ")}` : ""}
+      GROUP BY DATE(up."createdAt")
+      ORDER BY DATE(up."createdAt") ASC
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(ep."intent"), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      FROM "EnhancedPrompt" ep
+      WHERE ep."enterpriseId" = $1::bigint
+        AND ep."userId" = $2::bigint
+        ${epDateWhere}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(ep."domain"), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      FROM "EnhancedPrompt" ep
+      WHERE ep."enterpriseId" = $1::bigint
+        AND ep."userId" = $2::bigint
+        ${epDateWhere}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT COALESCE(NULLIF(BTRIM(ep."mode"), ''), 'Unknown') AS name, COUNT(*)::int AS value
+      FROM "EnhancedPrompt" ep
+      WHERE ep."enterpriseId" = $1::bigint
+        AND ep."userId" = $2::bigint
+        ${epDateWhere}
+      GROUP BY 1
+      ORDER BY value DESC
+      LIMIT 8
+      `,
+      params,
+    ),
+    executeEnterpriseQuery(
+      `
+      SELECT
+        up."id"::text AS "promptId",
+        up."createdAt",
+        LEFT(COALESCE(up."userPrompt", ''), 240) AS prompt,
+        COALESCE(NULLIF(BTRIM(ep."intent"), ''), 'Unknown') AS intent,
+        COALESCE(NULLIF(BTRIM(ep."mode"), ''), 'Unknown') AS mode,
+        COALESCE(NULLIF(BTRIM(ep."domain"), ''), 'Unknown') AS domain,
+        COALESCE(ep."totalToken", 0)::int AS "totalToken",
+        up."platform",
+        up."source"
+      FROM "UserPrompt" up
+      LEFT JOIN "EnhancedPrompt" ep ON ep."promptId" = up."id"
+      WHERE up."enterpriseId" = $1::bigint
+        AND up."userId" = $2::bigint
+        ${promptDateConditions.length > 0 ? `AND ${promptDateConditions.join(" AND ")}` : ""}
+      ORDER BY up."createdAt" DESC
+      LIMIT 12
+      `,
+      params,
+    ),
+  ]);
+
+  const profile = profileRows[0] || null;
+  const consumerRows = profile?.email
+    ? await getConsumerUsageForEmails([profile.email], startDate, endDate)
+    : [];
+
+  return {
+    profile,
+    summary: summaryRows[0] || {},
+    daily: dailyRows.map((r) => ({
+      date: new Date(r.date).toISOString().slice(0, 10),
+      prompts: parseInt(r.prompts || 0, 10),
+    })),
+    intents: intentRows,
+    domains: domainRows,
+    modes: modeRows,
+    recentPrompts: recentRows,
+    consumerUsage: consumerRows[0] || null,
   };
 }
 
@@ -1315,9 +1727,9 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
     moderationRows,
     queueRows,
     enterpriseOptionsRows,
-    userActivityRows,
     hourlyActivityRows,
     dowActivityRows,
+    userActivityRows,
   ] = await Promise.all([
     executeEnterpriseQuery(
       `
@@ -1521,6 +1933,18 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
       : Promise.resolve([]),
   ]);
 
+  const consumerUsageRows =
+    enterpriseParamIndex && userActivityRows.length > 0
+      ? await getConsumerUsageForEmails(
+          userActivityRows.map((r) => r.email),
+          startDate,
+          endDate,
+        ).catch(() => [])
+      : [];
+  const consumerUsageByEmail = new Map(
+    consumerUsageRows.map((r) => [String(r.email || "").toLowerCase(), r]),
+  );
+
   return {
     summary: summaryRows[0] || {},
     dailyPrompts: dailyPromptRows,
@@ -1530,7 +1954,23 @@ export async function getEnterprisePilotInsights(startDate, endDate, enterpriseI
     moderationActions: moderationRows,
     queueStatus: queueRows,
     enterpriseOptions: enterpriseOptionsRows,
-    userActivity: userActivityRows,
+    userActivity: userActivityRows.map((r) => {
+      const consumerUsage = consumerUsageByEmail.get(
+        String(r.email || "").toLowerCase(),
+      );
+      return {
+        ...r,
+        consumerPrompts: consumerUsage
+          ? parseInt(consumerUsage.consumer_prompts || 0, 10)
+          : 0,
+        consumerActiveDays: consumerUsage
+          ? parseInt(consumerUsage.consumer_active_days || 0, 10)
+          : 0,
+        consumerLastActive: consumerUsage?.consumer_last_active || null,
+        consumerStatus: consumerUsage?.status || null,
+        consumerUserId: consumerUsage?.user_id || null,
+      };
+    }),
     hourlyActivity: hourlyActivityRows.map((r) => ({ hour: r.hour, count: parseInt(r.count) })),
     dowActivity: dowActivityRows.map((r) => ({ dow: r.dow, count: parseInt(r.count) })),
   };

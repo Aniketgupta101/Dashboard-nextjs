@@ -94,6 +94,11 @@ export async function GET(request) {
           joinedAt: r.joinedAt,
           promptCount: toNumber(r.promptCount),
           lastActive: r.lastActive,
+          consumerPrompts: toNumber(r.consumerPrompts),
+          consumerActiveDays: toNumber(r.consumerActiveDays),
+          consumerLastActive: r.consumerLastActive,
+          consumerStatus: r.consumerStatus,
+          consumerUserId: r.consumerUserId,
         })),
       },
     });

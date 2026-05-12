@@ -19,7 +19,15 @@ import {
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useEnterpriseData } from "@/hooks/use-enterprise-data";
+import { getDateRange } from "@/lib/date-utils";
 import {
   Area,
   AreaChart,
@@ -67,7 +75,200 @@ function StatCard({ title, value, subtitle, icon: Icon, accent }) {
   );
 }
 
-function UserActivityTable({ users }) {
+function fmtDate(dateStr) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function buildVygrActionables(data) {
+  const users = data?.userActivity || [];
+  const enterprisePrompts = users.reduce((sum, user) => sum + Number(user.promptCount || 0), 0);
+  const consumerPrompts = users.reduce((sum, user) => sum + Number(user.consumerPrompts || 0), 0);
+  const consumerOnly = users.filter(
+    (user) => Number(user.consumerPrompts || 0) > 0 && Number(user.promptCount || 0) === 0,
+  ).length;
+  const enterpriseOnly = users.filter(
+    (user) => Number(user.promptCount || 0) > 0 && Number(user.consumerPrompts || 0) === 0,
+  ).length;
+  const dualMode = users.filter(
+    (user) => Number(user.promptCount || 0) > 0 && Number(user.consumerPrompts || 0) > 0,
+  ).length;
+  const topIntent = data?.intents?.[0];
+
+  return [
+    {
+      title: "Separate enterprise adoption from consumer fallback",
+      metric: `${enterprisePrompts.toLocaleString()} enterprise / ${consumerPrompts.toLocaleString()} consumer prompts`,
+      action:
+        consumerPrompts > 0
+          ? "Some VYGR emails still use the consumer product. Click those users and check if enterprise mode is hard to find, missing history, or not matching their daily workflow."
+          : "Matched VYGR emails are not showing consumer fallback in this range; keep the focus on enterprise activation depth.",
+    },
+    {
+      title: "Target migration for mixed-mode users",
+      metric: `${dualMode} dual-mode, ${consumerOnly} consumer-only`,
+      action:
+        dualMode + consumerOnly > 0
+          ? "Prioritize these members for migration messaging and enterprise-mode defaults because their email proves they already have intent outside the enterprise workspace."
+          : "No mixed-mode or consumer-only users are visible in this range; do not over-invest in migration UX until the signal appears.",
+    },
+    {
+      title: "Use the dominant intent as the pilot narrative",
+      metric: topIntent ? `${topIntent.intent}: ${topIntent.count}` : "No intent data",
+      action: topIntent
+        ? `Package ${topIntent.intent} examples for VYGR admins and use that use case in enablement, not generic prompt education.`
+        : "Intent coverage is thin; verify enhanced prompt instrumentation before drawing workflow conclusions.",
+    },
+    {
+      title: "Find enterprise-only champions",
+      metric: `${enterpriseOnly} enterprise-only users`,
+      action:
+        enterpriseOnly > 0
+          ? "Use these members as champion accounts: inspect their prompt patterns and turn repeated behavior into templates for the rest of VYGR."
+          : "Enterprise-only champions are not obvious yet; focus on first successful enterprise prompt per member.",
+    },
+  ];
+}
+
+function VygrUserDetailSheet({ open, onOpenChange, user, detail, loading, error }) {
+  const profile = detail?.profile || user || {};
+  const summary = detail?.summary || {};
+  const splitData = [
+    { name: "Enterprise", value: Number(summary.enterprisePrompts || 0) },
+    { name: "Consumer", value: Number(summary.consumerPrompts || 0) },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+        <SheetHeader className="border-b border-border/50 pr-10">
+          <SheetTitle>{profile.name || "VYGR user"}</SheetTitle>
+          <SheetDescription>{profile.email || "No email"}</SheetDescription>
+        </SheetHeader>
+
+        {loading ? (
+          <div className="space-y-4 p-4">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-52 rounded-xl" />
+            <Skeleton className="h-52 rounded-xl" />
+          </div>
+        ) : error ? (
+          <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        ) : detail ? (
+          <div className="space-y-5 p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard title="Enterprise Prompts" value={summary.enterprisePrompts || 0} icon={MessageSquareText} />
+              <StatCard title="Consumer Prompts" value={summary.consumerPrompts || 0} icon={UsersRound} />
+              <StatCard title="Enterprise Share" value={`${summary.enterpriseShare || 0}%`} icon={Building2} />
+              <StatCard title="Active Days" value={summary.enterpriseActiveDays || 0} icon={Zap} />
+            </div>
+
+            <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Product usage distinction
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Same email match: enterprise mode usage is counted from the VYGR
+                enterprise database; consumer usage is counted from the consumer
+                product database by email.
+              </p>
+              <div className="mt-4 grid gap-2 text-sm md:grid-cols-2">
+                <p>Enterprise last active: <span className="text-muted-foreground">{fmtDate(summary.lastActive)}</span></p>
+                <p>Consumer last active: <span className="text-muted-foreground">{fmtDate(summary.consumerLastActive)}</span></p>
+                <p>Enterprise status: <span className="text-muted-foreground">{profile.isActive ? "Active" : "Inactive"}</span></p>
+                <p>Consumer status: <span className="text-muted-foreground">{summary.consumerStatus || "No matched consumer account"}</span></p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title="Enterprise vs Consumer Split" source="db">
+                <ChartContainer
+                  config={{
+                    Enterprise: { label: "Enterprise", color: COLORS.primary },
+                    Consumer: { label: "Consumer", color: COLORS.warning },
+                  }}
+                  className="h-[220px] w-full"
+                >
+                  <PieChart>
+                    <Pie data={splitData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={78} innerRadius={42}>
+                      <Cell fill={COLORS.primary} />
+                      <Cell fill={COLORS.warning} />
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ChartContainer>
+              </ChartCard>
+
+              <ChartCard title="Enterprise Prompt Trend" source="db">
+                <ChartContainer
+                  config={{ prompts: { label: "Prompts", color: COLORS.primary } }}
+                  className="h-[220px] w-full"
+                >
+                  <AreaChart data={detail.daily || []}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area type="monotone" dataKey="prompts" stroke={COLORS.primary} fill={COLORS.primary} fillOpacity={0.18} strokeWidth={2} />
+                  </AreaChart>
+                </ChartContainer>
+              </ChartCard>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {[
+                ["Intent mix", detail.intents],
+                ["Domain mix", detail.domains],
+                ["Mode mix", detail.modes],
+              ].map(([title, rows]) => (
+                <div key={title} className="rounded-xl border border-border/50 bg-card/60 p-4">
+                  <p className="mb-3 text-xs font-medium text-muted-foreground">{title}</p>
+                  {rows?.length ? (
+                    <div className="space-y-2">
+                      {rows.slice(0, 5).map((row) => (
+                        <div key={row.name} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="truncate text-muted-foreground">{row.name}</span>
+                          <span className="font-mono">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No data</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <ChartCard title="Recent Enterprise Prompts" source="db">
+              <div className="space-y-3">
+                {(detail.recentPrompts || []).map((prompt) => (
+                  <div key={prompt.promptId} className="rounded-lg border border-border/40 bg-background/60 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>{fmtDate(prompt.createdAt)}</span>
+                      <Badge variant="outline" className="text-[10px]">{prompt.intent}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{prompt.mode}</Badge>
+                      <span>{prompt.totalToken || 0} tokens</span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{prompt.prompt || "No prompt text"}</p>
+                  </div>
+                ))}
+              </div>
+            </ChartCard>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function UserActivityTable({ users, onSelectUser }) {
   const [sortKey, setSortKey] = useState("promptCount");
   const [sortDir, setSortDir] = useState("desc");
   const [search, setSearch] = useState("");
@@ -145,7 +346,13 @@ function UserActivityTable({ users }) {
                   className="px-4 py-3 text-right font-medium cursor-pointer select-none whitespace-nowrap hover:text-foreground"
                   onClick={() => toggle("promptCount")}
                 >
-                  Prompts{arrow("promptCount")}
+                  Enterprise{arrow("promptCount")}
+                </th>
+                <th
+                  className="px-4 py-3 text-right font-medium cursor-pointer select-none whitespace-nowrap hover:text-foreground"
+                  onClick={() => toggle("consumerPrompts")}
+                >
+                  Consumer{arrow("consumerPrompts")}
                 </th>
                 <th
                   className="px-4 py-3 text-left font-medium cursor-pointer select-none whitespace-nowrap hover:text-foreground"
@@ -158,11 +365,23 @@ function UserActivityTable({ users }) {
             </thead>
             <tbody>
               {sorted.map((u, i) => (
-                <tr key={u.userId || i} className="border-t border-border/40 even:bg-muted/20">
+                <tr
+                  key={u.userId || i}
+                  className="cursor-pointer border-t border-border/40 even:bg-muted/20 hover:bg-muted/40"
+                  onClick={() => onSelectUser?.(u)}
+                  title="Open VYGR user behavior detail"
+                >
                   <td className="px-4 py-3">
-                    <div className="font-medium leading-tight">
+                    <button
+                      type="button"
+                      className="font-medium leading-tight text-left underline-offset-4 hover:underline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectUser?.(u);
+                      }}
+                    >
                       {u.name || <span className="text-muted-foreground italic">Unnamed</span>}
-                    </div>
+                    </button>
                     {u.email && (
                       <div className="text-xs text-muted-foreground">{u.email}</div>
                     )}
@@ -172,6 +391,9 @@ function UserActivityTable({ users }) {
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-medium">
                     {u.promptCount.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-medium">
+                    {(u.consumerPrompts || 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                     {fmt(u.lastActive)}
@@ -204,6 +426,10 @@ function UserActivityTable({ users }) {
 export default function VygrMediaPage() {
   const [dateFilter, setDateFilter] = useState("Last 30 Days");
   const [customDateRange, setCustomDateRange] = useState();
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   const { data, isLoading, error, refetch } = useEnterpriseData(
     dateFilter,
@@ -212,6 +438,7 @@ export default function VygrMediaPage() {
   );
 
   const summary = data?.summary || {};
+  const actionables = useMemo(() => buildVygrActionables(data), [data]);
 
   const teamChartData = useMemo(
     () =>
@@ -259,6 +486,35 @@ export default function VygrMediaPage() {
     summary.activeUsers > 0
       ? ((summary.activePromptUsers / summary.activeUsers) * 100).toFixed(0)
       : 0;
+
+  const openUserDetail = (user) => {
+    setSelectedUser(user);
+    setUserDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+
+    const range =
+      dateFilter === "Custom" && customDateRange?.from && customDateRange?.to
+        ? {
+            startDate: customDateRange.from,
+            endDate: new Date(customDateRange.to),
+          }
+        : getDateRange(dateFilter);
+    if (range.endDate) range.endDate.setHours(23, 59, 59, 999);
+
+    const params = new URLSearchParams({ enterpriseId: VYGR_ENTERPRISE_ID });
+    if (range.startDate) params.set("startDate", range.startDate.toISOString());
+    if (range.endDate) params.set("endDate", range.endDate.toISOString());
+
+    fetch(`/api/enterprise/users/${encodeURIComponent(user.userId)}?${params.toString()}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setUserDetail(json.data);
+        else setDetailError(json.error || "Unable to load user detail");
+      })
+      .catch((e) => setDetailError(e.message))
+      .finally(() => setDetailLoading(false));
+  };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -367,6 +623,28 @@ export default function VygrMediaPage() {
                 subtitle={`${summary.onboardedEnterprises ?? 0} completed`}
                 icon={UsersRound}
               />
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
+              Insight Actionables
+            </h2>
+            <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
+              {actionables.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-border/50 bg-card/60 p-4"
+                >
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className="mt-1 text-lg font-semibold text-blue-500">
+                    {item.metric}
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                    {item.action}
+                  </p>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -628,8 +906,22 @@ export default function VygrMediaPage() {
             <h2 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
               User Activity
             </h2>
-            <UserActivityTable users={data.userActivity || []} />
+            <UserActivityTable
+              users={data.userActivity || []}
+              onSelectUser={openUserDetail}
+            />
           </section>
+
+          <VygrUserDetailSheet
+            open={Boolean(selectedUser)}
+            onOpenChange={(open) => {
+              if (!open) setSelectedUser(null);
+            }}
+            user={selectedUser}
+            detail={userDetail}
+            loading={detailLoading}
+            error={detailError}
+          />
         </>
       )}
     </div>
