@@ -45,7 +45,7 @@ export function processUsageData(rawData, startDate, endDate) {
       u.prompts.push(row);
       u.daysActive.add(dateStr);
 
-      if (row.mode) u.modesUsed.add(row.mode);
+      if (row.mode) u.modesUsed.add(row.mode.toLowerCase().trim());
       if (row.llm_used) u.llmsUsed.add(row.llm_used);
       if (row.has_refinement) u.refineCount++;
       u.totalTokens +=

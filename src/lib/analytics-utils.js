@@ -236,8 +236,8 @@ export function processData(
 
   // Mode distribution
   const modeCounts = buildDistribution(unique, (d) => {
-    let mode = d.mode || "standard";
-    if (mode === "enhance" || mode === null) mode = "standard";
+    let mode = (d.mode || "standard").toLowerCase().trim();
+    if (mode === "enhance" || mode === "") mode = "standard";
     if (mode === "research") mode = "deep research";
     return mode;
   });

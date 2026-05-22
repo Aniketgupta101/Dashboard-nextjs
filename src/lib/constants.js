@@ -36,6 +36,10 @@ export const POWER_USER_THRESHOLD = 5; // Prompts to qualify as Power User
 export const UPGRADE_CANDIDATE_THRESHOLD = 20; // Prompts to qualify as upgrade candidate
 export const ACTIVATION_THRESHOLD = 3; // Prompts to count as activated
 
+// Activation definition: active on 2+ separate calendar days AND 3+ total prompts
+export const ACTIVATION_MIN_DAYS = 2;
+export const ACTIVATION_MIN_PROMPTS = 3;
+
 // Retention and activity thresholds
 export const CHURN_DAYS = 7; // Days inactive to count as churned
 export const RECENTLY_ACTIVE_DAYS = 14; // Days for "recently active" check

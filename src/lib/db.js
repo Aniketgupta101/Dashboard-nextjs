@@ -163,11 +163,18 @@ function pushPromptTableExclusionConditions(params, excludeUsers, alias = "up") 
  * Standard 5-table FROM + JOIN block shared by analytics, usage, and attrition queries.
  * Alias conventions: up=user_prompts, sep=save_enhance_prompt, rp=refine_prompt,
  *                    u=usertable, us=userstatus
+ *
+ * Refine join uses DISTINCT ON to prevent row duplication when a prompt has
+ * multiple refinement rounds (takes the latest refine per enhanced_prompt_id).
  */
 export const BASE_PROMPT_FROM_JOINS = `
   FROM user_prompts up
   LEFT JOIN save_enhance_prompt sep ON up.prompt_id = sep.prompt_id
-  LEFT JOIN refine_prompt rp        ON sep.enhanced_prompt_id = rp.enhanced_prompt_id
+  LEFT JOIN (
+    SELECT DISTINCT ON (enhanced_prompt_id) *
+    FROM refine_prompt
+    ORDER BY enhanced_prompt_id, created_at DESC
+  ) rp ON sep.enhanced_prompt_id = rp.enhanced_prompt_id
   LEFT JOIN usertable u              ON up.user_id = u.user_id
   LEFT JOIN userstatus us            ON up.user_id = us.user_id
 `;

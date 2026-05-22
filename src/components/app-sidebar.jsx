@@ -21,6 +21,8 @@ import {
   BookOpen,
   Crown,
   Tv2,
+  TrendingUp,
+  Brain,
 } from "lucide-react";
 
 import {
@@ -70,6 +72,16 @@ const analyticsItems = [
     title: "Retention",
     url: "/retention",
     icon: Users,
+  },
+  {
+    title: "Cohorts",
+    url: "/cohorts",
+    icon: TrendingUp,
+  },
+  {
+    title: "Intelligence",
+    url: "/intelligence",
+    icon: Brain,
   },
   {
     title: "Funnel",
