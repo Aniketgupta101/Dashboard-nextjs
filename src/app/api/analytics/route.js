@@ -8,6 +8,10 @@ import {
   getDailyInstallationMetrics,
   getActiveUsersBreakdown,
 } from "@/lib/db";
+import {
+  getActivePaidUsersCount,
+  getEnhancementFailuresByPlatform,
+} from "@/lib/db-p0-fixes";
 
 // Test users to exclude from analytics
 // const TEST_USERS = [
@@ -61,6 +65,7 @@ export async function GET(request) {
       dailyInstallationMetrics,
       prevData,
       activeBreakdownRaw,
+      activePaidCount,
     ] = await Promise.all([
       getAnalyticsData(startDate, endDate, source),
       getConversionMetrics(startDate, endDate, source),
@@ -72,6 +77,7 @@ export async function GET(request) {
         ? getAnalyticsData(prevStartDate, prevEndDate, source)
         : Promise.resolve([]),
       getActiveUsersBreakdown(startDate, endDate, source),
+      getActivePaidUsersCount(),
     ]);
 
     console.log(
@@ -130,6 +136,9 @@ export async function GET(request) {
 
     // Add active users breakdown for the chart
     processed.activeUsersChartData = activeUsersChartData;
+
+    // P0 fix: accurate active paid user count from subscriptions.status='active'
+    processed.metrics.activePaidUsers = activePaidCount;
 
     return NextResponse.json({
       success: true,
