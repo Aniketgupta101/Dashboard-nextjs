@@ -41,3 +41,36 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### SendFox (Actions page)
+
+The **Actions** page builds outreach cohorts from the system database and can sync them to SendFox lists. Add these server-only env vars locally and in production:
+
+```bash
+SENDFOX_ACCESS_TOKEN=your_rotated_sendfox_pat
+SENDFOX_LIST_MAX_USERS=your_list_id
+SENDFOX_LIST_FREE_ACTIVE=your_list_id
+SENDFOX_LIST_PRO_SUBSCRIBERS=your_list_id
+SENDFOX_LIST_CHURNED_VOLUNTARY=your_list_id
+SENDFOX_LIST_ENTERPRISE_PROSPECTS=your_enterprise_list_id
+SENDFOX_LIST_CHURN_RISK=your_list_id
+SENDFOX_LIST_ERROR_AFFECTED=your_list_id
+SENDFOX_LIST_RATE_LIMITED=your_list_id
+SENDFOX_LIST_UPGRADE_CANDIDATES=your_list_id
+```
+
+Never commit the SendFox token. If a token was pasted into chat or logs, rotate it in SendFox before using it in production.
+
+### Supermemory (Actions page behavior memory)
+
+The **Actions** page can sync selected user-behavior cohorts into Supermemory and query that cohort memory from the dashboard. Without an API key, the panel stays in demo mode and previews the exact records that would be sent.
+
+```bash
+SUPERMEMORY_API_KEY=your_supermemory_key
+SUPERMEMORY_API_BASE_URL=https://api.supermemory.ai
+SUPERMEMORY_NAMESPACE=thinkvelocity
+SUPERMEMORY_INCLUDE_PII=false
+SUPERMEMORY_DREAMING_MODE=dynamic
+```
+
+Keep `SUPERMEMORY_INCLUDE_PII=false` unless you explicitly want raw names/emails sent to Supermemory. The default sync redacts email addresses and sends behavior summaries, cohort labels, and non-sensitive metrics.

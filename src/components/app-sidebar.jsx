@@ -5,7 +5,6 @@ import {
   Activity,
   BarChart3,
   Gauge,
-  Heart,
   Target,
   UserMinus,
   UserPlus,
@@ -23,6 +22,8 @@ import {
   Tv2,
   TrendingUp,
   Brain,
+  Rocket,
+  Send,
 } from "lucide-react";
 
 import {
@@ -84,6 +85,11 @@ const analyticsItems = [
     icon: Brain,
   },
   {
+    title: "Actions",
+    url: "/actions",
+    icon: Send,
+  },
+  {
     title: "Funnel",
     url: "/conversion",
     icon: Target,
@@ -93,6 +99,11 @@ const analyticsItems = [
     url: "/acquisition",
     icon: UserPlus,
     disabled: true,
+  },
+  {
+    title: "Distribution",
+    url: "/distribution",
+    icon: Rocket,
   },
   {
     title: "Attrition / Churn",
