@@ -2,7 +2,7 @@ import net from "node:net";
 import { spawn } from "node:child_process";
 
 const localHost = process.env.SSH_DB_PROXY_LOCAL_HOST || "127.0.0.1";
-const localPort = Number(process.env.SSH_DB_PROXY_LOCAL_PORT || "15432");
+const localPort = Number(process.env.SSH_DB_PROXY_LOCAL_PORT || "5433");
 const keyPath =
   process.env.SSH_DB_PROXY_KEY || "C:/Users/Arjun/Downloads/new_velo_key.pem";
 const sshTarget = process.env.SSH_DB_PROXY_TARGET || "ubuntu@35.154.138.184";

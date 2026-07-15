@@ -25,6 +25,8 @@ export const STAKEHOLDER_EXCLUDED_NAMES_LOWER = [
   "arjun",
   "aniket gupta",
   "aniket jhatu",
+  "sarthak",
+  "vandan",
 ];
 
 // Time calculation constants
